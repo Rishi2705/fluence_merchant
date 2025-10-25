@@ -1,6 +1,6 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:dio/dio.dart';
 import '../../core/theme/theme.dart';
 import '../../core/constants/api_constants.dart';
 import 'onboarding_page.dart';
@@ -93,7 +93,8 @@ class _PhoneAuthPageState extends State<PhoneAuthPage> {
         String? firebaseIdToken;
         try {
           firebaseIdToken = await currentUser.getIdToken();
-          print('Got Firebase ID token: ${firebaseIdToken?.substring(0, 20)}...');
+          print('Got Firebase ID token (full): $firebaseIdToken');
+          print('Firebase ID token length: ${firebaseIdToken?.length}');
         } catch (e) {
           print('Failed to get ID token: $e');
         }
@@ -108,31 +109,58 @@ class _PhoneAuthPageState extends State<PhoneAuthPage> {
 
         // Authenticate with backend Auth Service
         print('Authenticating with backend at ${ApiConstants.authBaseUrl}${ApiConstants.authFirebase}');
+        
+        // Retry mechanism for connection timeouts
+        int retryCount = 0;
+        const maxRetries = 3;
+        Response? response;
+        
         try {
-          final dio = Dio(BaseOptions(
-            connectTimeout: const Duration(seconds: 30),
-            receiveTimeout: const Duration(seconds: 30),
-          ));
-          final response = await dio.post(
-            '${ApiConstants.authBaseUrl}${ApiConstants.authFirebase}',
-            data: {
-              'idToken': firebaseIdToken,
-            },
-            options: Options(
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              validateStatus: (status) => status! < 500,
-            ),
-          );
+          while (retryCount < maxRetries) {
+            try {
+              print('Attempt ${retryCount + 1} of $maxRetries');
+              final dio = Dio(BaseOptions(
+                connectTimeout: const Duration(seconds: 60),
+                receiveTimeout: const Duration(seconds: 60),
+              ));
+              response = await dio.post(
+                '${ApiConstants.authBaseUrl}${ApiConstants.authFirebase}',
+                data: {
+                  'idToken': firebaseIdToken,
+                },
+                options: Options(
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  validateStatus: (status) => status! < 500,
+                ),
+              );
+              break; // Success, exit retry loop
+            } catch (e) {
+              retryCount++;
+              print('Attempt $retryCount failed: $e');
+              
+              // Check if it's a DioException and if it's a connection timeout
+              if (e is DioException && e.type == DioExceptionType.connectionTimeout && retryCount < maxRetries) {
+                print('Connection timeout, retrying in ${retryCount * 2} seconds...');
+                await Future.delayed(Duration(seconds: retryCount * 2));
+                continue;
+              } else {
+                rethrow; // Re-throw if not a retryable timeout or max retries reached
+              }
+            }
+          }
 
-          print('Backend response status: ${response.statusCode}');
-          print('Backend response data: ${response.data}');
+          print('Backend response status: ${response?.statusCode}');
+          print('Backend response data: ${response?.data}');
 
-          if (response.statusCode == 200 || response.statusCode == 201) {
-            final responseData = response.data;
+          if (response?.statusCode == 200 || response?.statusCode == 201) {
+            final responseData = response!.data;
             final backendToken = responseData['token'];
             final needsProfileCompletion = responseData['needsProfileCompletion'] ?? false;
+            
+            print('Backend JWT token (full): $backendToken');
+            print('Backend JWT token length: ${backendToken?.length}');
 
             if (mounted) {
               setState(() {
@@ -153,32 +181,28 @@ class _PhoneAuthPageState extends State<PhoneAuthPage> {
             setState(() {
               _isLoading = false;
             });
-            final errorMessage = response.data['error'] ?? 'Backend authentication failed';
+            final errorMessage = response?.data['error'] ?? 'Backend authentication failed';
             _showError(errorMessage);
           }
-        } on DioException catch (e) {
-          print('Backend auth DioException: ${e.type}, ${e.message}');
+        } catch (e) {
+          print('Backend auth error: $e');
           setState(() {
             _isLoading = false;
           });
 
           String errorMessage = 'Failed to connect to authentication server';
-          if (e.type == DioExceptionType.connectionTimeout) {
-            errorMessage = 'Connection timeout. Please check your internet and ensure backend is running.';
-          } else if (e.type == DioExceptionType.receiveTimeout) {
-            errorMessage = 'Server is taking too long to respond.';
-          } else if (e.response != null) {
-            print('Backend error response: ${e.response?.data}');
-            errorMessage = e.response!.data['error'] ?? 'Authentication server error: ${e.response!.statusCode}';
+          if (e is DioException) {
+            if (e.type == DioExceptionType.connectionTimeout) {
+              errorMessage = 'Connection timeout after $maxRetries attempts. Please check your internet and ensure backend is running.';
+            } else if (e.type == DioExceptionType.receiveTimeout) {
+              errorMessage = 'Server is taking too long to respond.';
+            } else if (e.response != null) {
+              print('Backend error response: ${e.response?.data}');
+              errorMessage = e.response!.data['error'] ?? 'Authentication server error: ${e.response!.statusCode}';
+            }
           }
           
           _showError(errorMessage);
-        } catch (e) {
-          print('Backend auth general error: $e');
-          setState(() {
-            _isLoading = false;
-          });
-          _showError('Unexpected error during backend authentication');
         }
       } else {
         // No user signed in, still show error

@@ -96,9 +96,15 @@ class AuthApiService {
       }
       return 'Server error: ${error.response!.statusCode}';
     } else if (error.type == DioExceptionType.connectionTimeout) {
-      return 'Connection timeout';
+      return 'Connection timeout - Server took too long to respond. Please check your internet connection and ensure the backend server is running.';
     } else if (error.type == DioExceptionType.receiveTimeout) {
-      return 'Receive timeout';
+      return 'Receive timeout - Server is taking too long to send data. Please try again.';
+    } else if (error.type == DioExceptionType.sendTimeout) {
+      return 'Send timeout - Request took too long to send. Please check your internet connection.';
+    } else if (error.type == DioExceptionType.cancel) {
+      return 'Request was cancelled';
+    } else if (error.type == DioExceptionType.badResponse) {
+      return 'Bad response from server: ${error.response?.statusCode}';
     } else {
       return 'Network error: ${error.message}';
     }

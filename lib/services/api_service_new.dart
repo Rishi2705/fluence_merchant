@@ -42,6 +42,25 @@ class ApiService {
 
   /// Setup interceptors for logging and auth
   void _setupInterceptors(Dio dio) {
+    // Retry interceptor for connection timeouts
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onError: (DioException error, ErrorInterceptorHandler handler) async {
+          if (error.type == DioExceptionType.connectionTimeout) {
+            // Retry once for connection timeouts
+            final options = error.requestOptions;
+            try {
+              final response = await dio.fetch(options);
+              return handler.resolve(response);
+            } catch (e) {
+              return handler.next(error);
+            }
+          }
+          return handler.next(error);
+        },
+      ),
+    );
+
     // Auth interceptor
     dio.interceptors.add(
       InterceptorsWrapper(
