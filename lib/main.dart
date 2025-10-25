@@ -1,8 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'core/theme/theme.dart';
+import 'core/di/service_locator.dart';
 import 'presentation/pages/splash_page_simple.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Firebase
+  await Firebase.initializeApp();
+  
+  // Initialize dependency injection
+  await setupServiceLocator();
+  
   runApp(const MyApp());
 }
 

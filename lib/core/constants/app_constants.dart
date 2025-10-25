@@ -32,6 +32,12 @@ class AppConstants {
   static const double cardBorderRadius = 12.0;
   static const double buttonHeight = 48.0;
   static const double inputHeight = 48.0;
+  static const String defaultUserName = "Rishi";
+
+  // Demo Data
+  static const int defaultPoints = 1250;
+  static const double defaultCashback = 245.0;
+  static const String demoImagePath = 'assets/images/demo_merchant.png';
 
   // Error Messages
   static const String generalErrorMessage = 'Something went wrong. Please try again.';

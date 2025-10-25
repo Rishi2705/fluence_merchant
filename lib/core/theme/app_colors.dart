@@ -7,11 +7,11 @@ class AppColors {
   // Private constructor to prevent instantiation
   AppColors._();
 
-  // Primary colors - Fluence Pay Golden/Bronze
-  static const Color primary = Color(0xFFB8860B); // Dark golden rod
-  static const Color primaryLight = Color(0xFFDAA520); // Golden rod
-  static const Color primaryDark = Color(0xFF996633); // Darker bronze
-  static const Color primaryVariant = Color(0xFF8B4513); // Saddle brown
+  // Primary colors - Fluence Pay Golden/Yellow
+  static const Color primary = Color(0xFFFDB913); // Fluence Gold
+  static const Color primaryLight = Color(0xFFFFD54F); // Light gold
+  static const Color primaryDark = Color(0xFFE5A620); // Dark gold
+  static const Color primaryVariant = Color(0xFFD4A428); // Gold variant
 
   // Secondary colors - Complementary tones
   static const Color secondary = Color(0xFFCD853F); // Peru
@@ -20,16 +20,17 @@ class AppColors {
   static const Color secondaryVariant = Color(0xFF8B4513); // Saddle brown
 
   // Background colors - Clean and minimal
-  static const Color background = Color(0xFFFFFDF7); // Cream white
-  static const Color surface = Color(0xFFFFFFFF);
-  static const Color surfaceVariant = Color(0xFFFAF7F0); // Very light cream
+  static const Color background = Color(0xFFF5F5F5); // Light grey
+  static const Color surface = Color(0xFFFFFFFF); // Pure white
+  static const Color surfaceVariant = Color(0xFFFAFAFA); // Off white
+  static const Color lightCream = Color(0xFFFFF8F0); // Light cream for password page
 
   // Text colors
-  static const Color onPrimary = Color(0xFFFFFFFF);
-  static const Color onSecondary = Color(0xFFFFFFFF);
-  static const Color onBackground = Color(0xFF2C1810); // Dark brown
-  static const Color onSurface = Color(0xFF2C1810);
-  static const Color onSurfaceVariant = Color(0xFF5D4037); // Medium brown
+  static const Color onPrimary = Color(0xFFFFFFFF); // White on gold
+  static const Color onSecondary = Color(0xFFFFFFFF); // White on secondary
+  static const Color onBackground = Color(0xFF000000); // Black on light background
+  static const Color onSurface = Color(0xFF2C1810); // Dark brown
+  static const Color onSurfaceVariant = Color(0xFF757575); // Medium grey
 
   // Status colors
   static const Color success = Color(0xFF2E7D32); // Green
@@ -57,15 +58,18 @@ class AppColors {
   static const Color shadow = Color(0x1F000000);
 
   // Fluence Pay specific colors
-  static const Color fluenceGold = Color(0xFFB8860B);
-  static const Color fluenceGoldLight = Color(0xFFDAA520);
-  static const Color fluenceGoldDark = Color(0xFF996633);
+  static const Color fluenceGold = Color(0xFFFDB913); // Main Fluence gold
+  static const Color fluenceGoldLight = Color(0xFFFFD54F); // Light gold
+  static const Color fluenceGoldDark = Color(0xFFE5A620); // Dark gold
   static const Color fluenceBronze = Color(0xFFCD853F);
   static const Color fluenceAccent = Color(0xFFDEB887);
 
+  // Pink accent for profile borders
+  static const Color pinkAccent = Color(0xFFE91E63);
+
   // Gradient colors for Fluence Pay theme
   static const LinearGradient primaryGradient = LinearGradient(
-    colors: [fluenceGold, fluenceGoldLight],
+    colors: [Color(0xFFD4A428), Color(0xFFF5C842)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
@@ -81,5 +85,12 @@ class AppColors {
     colors: [background, surfaceVariant],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
+  );
+
+  // Card gradient for Fluence card
+  static const LinearGradient cardGradient = LinearGradient(
+    colors: [Color(0xFFD4A428), Color(0xFFF5C842)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
   );
 }
