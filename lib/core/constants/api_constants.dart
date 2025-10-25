@@ -9,7 +9,7 @@ class ApiConstants {
   
   /// Manual override for host selection
   /// Set this to 'emulator' or 'physical' to force a specific host
-  static const String? _hostOverride = null; // Change to 'emulator' or 'physical' if needed
+  static const String? _hostOverride = 'physical'; // Change to 'emulator' or 'physical' if needed
   
   /// Get the appropriate host based on device type
   static String get _baseHost {
@@ -33,7 +33,7 @@ class ApiConstants {
   
   /// Get the appropriate host for physical devices
   static String get _physicalDeviceHost {
-    return '172.20.10.2'; // Your PC's IP on local network
+    return '192.168.0.180'; // Your PC's IP on local network
   }
   
   /// Get the appropriate host for emulators
@@ -52,8 +52,8 @@ class ApiConstants {
   
   // Dynamic base URLs based on device type
   static String get authBaseUrl => 'http://$_baseHost:4001';           // Auth Service
-  static String get merchantBaseUrl => 'http://$_baseHost:4002';       // Merchant Service (your setup)
-  static String get cashbackBaseUrl => 'http://$_baseHost:4003';       // Cashback Service
+  static String get merchantBaseUrl => 'http://$_baseHost:4003';       // Merchant Service (corrected port)
+  static String get cashbackBaseUrl => 'http://$_baseHost:4002';       // Cashback Service (corrected port)
   static String get notificationBaseUrl => 'http://$_baseHost:4004';   // Notification Service
   static String get walletBaseUrl => 'http://$_baseHost:4005';         // Points Wallet Service
   static String get referralBaseUrl => 'http://$_baseHost:4006';       // Referral Service

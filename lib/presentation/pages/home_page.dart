@@ -84,9 +84,13 @@ class HomePageContent extends StatelessWidget {
               color: const Color(0xFFF5F9FC),
               child: SingleChildScrollView(
                 padding: const EdgeInsets.only(bottom: 100), // Space for bottom nav
-                child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
                   child: Container(
-                    width: MediaQuery.of(context).size.width * 0.8,
+                    width: double.infinity,
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width - 32,
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 16.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -140,14 +144,20 @@ class HomePageContent extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildPerformerAvatar('Tokyo', 'T', Colors.orange),
-            _buildPerformerAvatar('Walt', 'W', Colors.grey.shade800),
-            _buildPerformerAvatar('Mike', 'M', Colors.orange),
-            _buildPerformerAvatar('Oldiey', 'O', Colors.grey),
-          ],
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildPerformerAvatar('Tokyo', 'T', Colors.orange),
+              const SizedBox(width: 16),
+              _buildPerformerAvatar('Walt', 'W', Colors.grey.shade800),
+              const SizedBox(width: 16),
+              _buildPerformerAvatar('Mike', 'M', Colors.orange),
+              const SizedBox(width: 16),
+              _buildPerformerAvatar('Oldiey', 'O', Colors.grey),
+            ],
+          ),
         ),
       ],
     );
@@ -479,11 +489,14 @@ class HomePageContent extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Text(
-                      name,
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.onBackground,
+                    Flexible(
+                      child: Text(
+                        name,
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.onBackground,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const SizedBox(width: 8),

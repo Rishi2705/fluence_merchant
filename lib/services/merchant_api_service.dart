@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import '../models/merchant_model.dart';
 import '../core/constants/api_constants.dart';
+import '../utils/logger.dart';
 import 'api_service_new.dart';
 
 class MerchantApiService {
@@ -19,30 +20,97 @@ class MerchantApiService {
     double? expectedMonthlyVolume,
     BankingInfo? bankingInfo,
   }) async {
+    AppLogger.step(1, 'Starting merchant application submission');
+    AppLogger.api('Application submission request initiated', data: {
+      'businessName': businessName,
+      'businessType': businessType,
+      'contactEmail': contactEmail,
+      'contactPhone': contactPhone,
+      'businessDescription': businessDescription.length > 50 ? '${businessDescription.substring(0, 50)}...' : businessDescription,
+      'hasExpectedVolume': expectedMonthlyVolume != null,
+      'expectedMonthlyVolume': expectedMonthlyVolume,
+      'hasBankingInfo': bankingInfo != null,
+      'endpoint': '${ApiConstants.merchantBaseUrl}${ApiConstants.merchantApplications}',
+    });
+
     try {
-      final response = await _apiService.post(
-        ApiConstants.merchantApplications,
-        service: 'merchant',
-        data: {
+      // Convert BusinessAddress to string format expected by backend
+      final addressString = '${businessAddress.street}, ${businessAddress.city}, ${businessAddress.state} ${businessAddress.zipCode}, ${businessAddress.country}';
+      
+      final requestData = {
+        'businessName': businessName,
+        'businessType': businessType,
+        'contactPerson': businessName, // Use business name as contact person for now
+        'email': contactEmail, // Backend expects 'email' not 'contactEmail'
+        'phone': contactPhone, // Backend expects 'phone' not 'contactPhone'
+        'businessAddress': addressString, // Backend expects string, not object
+        if (bankingInfo != null) 'bankAccountDetails': {
+          'accountNumber': bankingInfo.accountNumber,
+          'routingNumber': bankingInfo.routingNumber,
+        },
+      };
+
+      AppLogger.networkRequest(
+        method: 'POST',
+        url: '${ApiConstants.merchantBaseUrl}${ApiConstants.merchantApplications}',
+        body: {
           'businessName': businessName,
           'businessType': businessType,
-          'contactEmail': contactEmail,
-          'contactPhone': contactPhone,
-          'businessAddress': businessAddress.toJson(),
-          'businessDescription': businessDescription,
-          if (expectedMonthlyVolume != null)
-            'expectedMonthlyVolume': expectedMonthlyVolume,
-          if (bankingInfo != null) 'bankingInfo': bankingInfo.toJson(),
+          'contactPerson': businessName,
+          'email': contactEmail,
+          'phone': contactPhone,
+          'businessAddress': addressString,
+          if (bankingInfo != null) 'bankAccountDetails': 'BANKING_INFO_PROVIDED',
         },
       );
 
+      final stopwatch = Stopwatch()..start();
+      final response = await _apiService.post(
+        ApiConstants.merchantApplications,
+        service: 'merchant',
+        data: requestData,
+      );
+      stopwatch.stop();
+
+      AppLogger.networkResponse(
+        statusCode: response.statusCode ?? 0,
+        url: '${ApiConstants.merchantBaseUrl}${ApiConstants.merchantApplications}',
+        body: response.data,
+        duration: stopwatch.elapsed,
+      );
+
       if (response.statusCode == 201 || response.statusCode == 200) {
-        return MerchantApplication.fromJson(response.data['data']);
+        AppLogger.step(2, 'Application submission successful, parsing response');
+        
+        try {
+          final application = MerchantApplication.fromJson(response.data['data']);
+          AppLogger.success('Merchant application parsed successfully', data: {
+            'applicationId': application.id,
+            'businessName': application.businessName,
+            'status': application.status,
+          });
+          return application;
+        } catch (parseError, stackTrace) {
+          AppLogger.error('Failed to parse merchant application', error: parseError, stackTrace: stackTrace);
+          AppLogger.error('Raw response data for debugging', data: response.data);
+          throw Exception('Failed to parse application response: $parseError');
+        }
       } else {
-        throw Exception('Application submission failed');
+        AppLogger.error('Application submission failed with status code: ${response.statusCode}', data: response.data);
+        throw Exception('Application submission failed with status: ${response.statusCode}');
       }
-    } on DioException catch (e) {
+    } on DioException catch (e, stackTrace) {
+      AppLogger.error('DioException during application submission', error: e, stackTrace: stackTrace);
+      AppLogger.error('DioException details', data: {
+        'type': e.type.toString(),
+        'message': e.message,
+        'statusCode': e.response?.statusCode,
+        'responseData': e.response?.data,
+      });
       throw _handleError(e);
+    } catch (e, stackTrace) {
+      AppLogger.error('Unexpected error during application submission', error: e, stackTrace: stackTrace);
+      rethrow;
     }
   }
 

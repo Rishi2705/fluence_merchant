@@ -4,8 +4,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 import '../../core/theme/theme.dart';
-import '../../core/constants/app_constants.dart';
 import '../../core/constants/api_constants.dart';
+import '../../utils/logger.dart';
 import 'main_container_page.dart';
 
 /// Merchant onboarding/application form page
@@ -79,7 +79,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
   @override
   void dispose() {
     _businessNameController.dispose();
-    _businessNameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     _streetController.dispose();
@@ -91,22 +90,37 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   Future<void> _submitApplication() async {
+    AppLogger.step(1, 'Starting merchant application submission from UI');
+    AppLogger.auth('Application submission initiated', data: {
+      'businessName': _businessNameController.text.trim(),
+      'selectedCategory': _selectedCategory,
+      'email': _emailController.text.trim(),
+      'phone': _phoneController.text.trim(),
+      'hasFirebaseToken': widget.firebaseToken != null,
+    });
+
     if (!_formKey.currentState!.validate()) {
+      AppLogger.warning('Form validation failed');
       _showError('Please fill all required fields');
       return;
     }
 
+    if (!mounted) return;
+
     if (_businessNameController.text.trim().isEmpty) {
+      AppLogger.warning('Business name is empty');
       _showError('Business name is required');
       return;
     }
 
     if (_emailController.text.trim().isEmpty) {
+      AppLogger.warning('Email is empty');
       _showError('Email is required');
       return;
     }
 
     if (_phoneController.text.trim().isEmpty) {
+      AppLogger.warning('Phone number is empty');
       _showError('Phone number is required');
       return;
     }
@@ -123,46 +137,77 @@ class _OnboardingPageState extends State<OnboardingPage> {
     );
 
     try {
-      // Prepare application data
+      AppLogger.step(2, 'Preparing application data');
+      
+      if (!mounted) return;
+      
+      // Convert address to string format expected by backend
+      final street = _streetController.text.trim().isEmpty ? 'Not provided' : _streetController.text.trim();
+      final city = _cityController.text.trim().isEmpty ? 'Not provided' : _cityController.text.trim();
+      final state = _stateController.text.trim().isEmpty ? 'Not provided' : _stateController.text.trim();
+      final zipCode = _zipCodeController.text.trim().isEmpty ? '000000' : _zipCodeController.text.trim();
+      final addressString = '$street, $city, $state $zipCode, India';
+      
+      final phone = _phoneController.text.trim().isEmpty 
+          ? widget.phoneNumber ?? 'Not provided'
+          : _phoneController.text.trim();
+      
+      // Prepare application data in the format expected by backend
       final applicationData = {
         'businessName': _businessNameController.text.trim(),
         'businessType': _selectedCategory,
-        'contactEmail': _emailController.text.trim(),
-        'contactPhone': _phoneController.text.trim().isEmpty 
-            ? widget.phoneNumber ?? 'Not provided'
-            : _phoneController.text.trim(),
-        'businessAddress': {
-          'street': _streetController.text.trim().isEmpty 
-              ? 'Not provided' 
-              : _streetController.text.trim(),
-          'city': _cityController.text.trim().isEmpty 
-              ? 'Not provided' 
-              : _cityController.text.trim(),
-          'state': _stateController.text.trim().isEmpty 
-              ? 'Not provided' 
-              : _stateController.text.trim(),
-          'zipCode': _zipCodeController.text.trim().isEmpty 
-              ? '000000' 
-              : _zipCodeController.text.trim(),
-          'country': 'India',
-        },
-        'businessDescription': _businessDescController.text.trim().isEmpty 
-            ? 'Merchant application for ${_selectedCategory}' 
-            : _businessDescController.text.trim(),
-        'expectedMonthlyVolume': 0,
+        'contactPerson': _businessNameController.text.trim(), // Backend expects this field
+        'email': _emailController.text.trim(), // Backend expects 'email' not 'contactEmail'
+        'phone': phone, // Backend expects 'phone' not 'contactPhone'
+        'businessAddress': addressString, // Backend expects string, not object
       };
 
+      if (!mounted) return;
+
+      AppLogger.api('Application data prepared', data: {
+        'businessName': applicationData['businessName'],
+        'businessType': applicationData['businessType'],
+        'contactPerson': applicationData['contactPerson'],
+        'email': applicationData['email'],
+        'phone': applicationData['phone'],
+        'businessAddress': addressString,
+      });
+
+      AppLogger.step(3, 'Creating Dio instance and setting up headers');
+      
       // Create Dio instance
-      final dio = Dio();
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 60),
+        receiveTimeout: const Duration(seconds: 60),
+      ));
       
       // Add authorization header if we have Firebase token
       if (widget.firebaseToken != null) {
         dio.options.headers['Authorization'] = 'Bearer ${widget.firebaseToken}';
+        AppLogger.auth('Authorization header set', data: {
+          'hasToken': true,
+          'tokenLength': widget.firebaseToken!.length,
+          'tokenPreview': '${widget.firebaseToken!.substring(0, 20)}...',
+        });
+      } else {
+        AppLogger.warning('No Firebase token available for authorization');
       }
 
-      // Submit to backend
+      final url = '${ApiConstants.merchantBaseUrl}/api/applications';
+      AppLogger.step(4, 'Submitting application to backend');
+      AppLogger.networkRequest(
+        method: 'POST',
+        url: url,
+        headers: {
+          'Content-Type': 'application/json',
+          if (widget.firebaseToken != null) 'Authorization': 'Bearer ${widget.firebaseToken!.substring(0, 20)}...',
+        },
+        body: applicationData,
+      );
+
+      final stopwatch = Stopwatch()..start();
       final response = await dio.post(
-        '${ApiConstants.merchantBaseUrl}/api/applications',
+        url,
         data: applicationData,
         options: Options(
           headers: {
@@ -171,11 +216,25 @@ class _OnboardingPageState extends State<OnboardingPage> {
           validateStatus: (status) => status! < 500,
         ),
       );
+      stopwatch.stop();
+
+      AppLogger.networkResponse(
+        statusCode: response.statusCode ?? 0,
+        url: url,
+        body: response.data,
+        duration: stopwatch.elapsed,
+      );
 
       if (mounted) {
         Navigator.of(context).pop(); // Close loading dialog
         
         if (response.statusCode == 200 || response.statusCode == 201) {
+          AppLogger.step(5, 'Application submission successful');
+          AppLogger.success('Application submitted successfully', data: {
+            'statusCode': response.statusCode,
+            'responseData': response.data,
+          });
+          
           _showSuccess('Application submitted successfully!');
           
           // Navigate to home after short delay
@@ -189,16 +248,29 @@ class _OnboardingPageState extends State<OnboardingPage> {
             }
           });
         } else {
+          AppLogger.error('Application submission failed', data: {
+            'statusCode': response.statusCode,
+            'responseData': response.data,
+          });
           final errorMessage = response.data['message'] ?? 'Failed to submit application';
           _showError(errorMessage);
         }
       }
-    } on DioException catch (e) {
+    } on DioException catch (e, stackTrace) {
+      AppLogger.error('DioException during application submission', error: e, stackTrace: stackTrace);
+      AppLogger.error('DioException details', data: {
+        'type': e.type.toString(),
+        'message': e.message,
+        'statusCode': e.response?.statusCode,
+        'responseData': e.response?.data,
+      });
+
       if (mounted) {
         Navigator.of(context).pop(); // Close loading dialog
         
         String errorMessage = 'Failed to connect to server';
         if (e.response != null) {
+          AppLogger.error('Server error response', data: e.response?.data);
           errorMessage = e.response!.data['message'] ?? 
                         'Server error: ${e.response!.statusCode}';
         } else if (e.type == DioExceptionType.connectionTimeout) {
@@ -207,9 +279,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
           errorMessage = 'Server is taking too long to respond.';
         }
         
+        AppLogger.error('Showing error to user', data: {'errorMessage': errorMessage});
         _showError(errorMessage);
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      AppLogger.error('Unexpected error during application submission', error: e, stackTrace: stackTrace);
       if (mounted) {
         Navigator.of(context).pop(); // Close loading dialog
         _showError('Error submitting application: $e');
@@ -218,7 +292,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   void _showError(String message) {
-    if (mounted) {
+    if (mounted && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
@@ -230,7 +304,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   void _showSuccess(String message) {
-    if (mounted) {
+    if (mounted && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),

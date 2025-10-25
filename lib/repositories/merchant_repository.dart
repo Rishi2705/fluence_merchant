@@ -1,5 +1,6 @@
 import '../models/merchant_model.dart';
 import '../services/merchant_api_service.dart';
+import '../utils/logger.dart';
 
 class MerchantRepository {
   final MerchantApiService _merchantApiService;
@@ -16,16 +17,24 @@ class MerchantRepository {
     double? expectedMonthlyVolume,
     BankingInfo? bankingInfo,
   }) async {
-    return await _merchantApiService.submitApplication(
-      businessName: businessName,
-      businessType: businessType,
-      contactEmail: contactEmail,
-      contactPhone: contactPhone,
-      businessAddress: businessAddress,
-      businessDescription: businessDescription,
-      expectedMonthlyVolume: expectedMonthlyVolume,
-      bankingInfo: bankingInfo,
-    );
+    AppLogger.auth('Repository: Starting merchant application submission');
+    try {
+      final result = await _merchantApiService.submitApplication(
+        businessName: businessName,
+        businessType: businessType,
+        contactEmail: contactEmail,
+        contactPhone: contactPhone,
+        businessAddress: businessAddress,
+        businessDescription: businessDescription,
+        expectedMonthlyVolume: expectedMonthlyVolume,
+        bankingInfo: bankingInfo,
+      );
+      AppLogger.success('Repository: Merchant application submission completed successfully');
+      return result;
+    } catch (e, stackTrace) {
+      AppLogger.error('Repository: Merchant application submission failed', error: e, stackTrace: stackTrace);
+      rethrow;
+    }
   }
 
   Future<List<MerchantApplication>> getApplications() async {

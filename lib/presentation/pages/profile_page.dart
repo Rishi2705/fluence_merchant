@@ -5,7 +5,6 @@ import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../core/constants/app_constants.dart';
 import '../../core/constants/api_constants.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -142,7 +141,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.only(top: 24, bottom: 100),
                   child: Center(
-                    child: Container(
+                    child: SizedBox(
                       width: MediaQuery.of(context).size.width * 0.8,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
