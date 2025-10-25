@@ -606,6 +606,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
                   child: Form(
+
                     key: _formKey,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
