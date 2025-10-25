@@ -1,17 +1,63 @@
+import 'dart:io';
+
 /// API constants for Fluence Pay Backend Services
 class ApiConstants {
   // Base URLs for microservices - Running backend on localhost
-  // Physical device MUST use PC's IP address (not 'localhost')
+  // Android Emulator: Use 10.0.2.2 to access host machine's localhost
+  // Physical device: Use PC's IP address (not 'localhost')
   // 'localhost' on phone = phone itself, NOT your PC
-  static const String _baseHost = '172.20.10.2'; // Your PC's IP on local network
   
-  static const String authBaseUrl = 'http://$_baseHost:4001';           // Auth Service
-  static const String merchantBaseUrl = 'http://$_baseHost:4002';       // Merchant Service (your setup)
-  static const String cashbackBaseUrl = 'http://$_baseHost:4003';       // Cashback Service
-  static const String notificationBaseUrl = 'http://$_baseHost:4004';   // Notification Service
-  static const String walletBaseUrl = 'http://$_baseHost:4005';         // Points Wallet Service
-  static const String referralBaseUrl = 'http://$_baseHost:4006';       // Referral Service
-  static const String socialBaseUrl = 'http://$_baseHost:4007';         // Social Features Service
+  /// Manual override for host selection
+  /// Set this to 'emulator' or 'physical' to force a specific host
+  static const String? _hostOverride = null; // Change to 'emulator' or 'physical' if needed
+  
+  /// Get the appropriate host based on device type
+  static String get _baseHost {
+    // Manual override takes precedence
+    if (_hostOverride == 'emulator') {
+      return _emulatorHost;
+    } else if (_hostOverride == 'physical') {
+      return _physicalDeviceHost;
+    }
+    
+    if (Platform.isAndroid) {
+      // For now, default to emulator for development
+      // You can enhance this with actual emulator detection if needed
+      return _emulatorHost;
+    } else if (Platform.isIOS) {
+      return 'localhost'; // iOS simulator can use localhost
+    } else {
+      return 'localhost'; // Desktop/other platforms
+    }
+  }
+  
+  /// Get the appropriate host for physical devices
+  static String get _physicalDeviceHost {
+    return '172.20.10.2'; // Your PC's IP on local network
+  }
+  
+  /// Get the appropriate host for emulators
+  static String get _emulatorHost {
+    return '10.0.2.2'; // Android emulator host mapping
+  }
+  
+  /// Get current host being used
+  static String get currentHost => _baseHost;
+  
+  /// Check if currently using emulator host
+  static bool get isUsingEmulatorHost => _baseHost == _emulatorHost;
+  
+  /// Check if currently using physical device host
+  static bool get isUsingPhysicalDeviceHost => _baseHost == _physicalDeviceHost;
+  
+  // Dynamic base URLs based on device type
+  static String get authBaseUrl => 'http://$_baseHost:4001';           // Auth Service
+  static String get merchantBaseUrl => 'http://$_baseHost:4002';       // Merchant Service (your setup)
+  static String get cashbackBaseUrl => 'http://$_baseHost:4003';       // Cashback Service
+  static String get notificationBaseUrl => 'http://$_baseHost:4004';   // Notification Service
+  static String get walletBaseUrl => 'http://$_baseHost:4005';         // Points Wallet Service
+  static String get referralBaseUrl => 'http://$_baseHost:4006';       // Referral Service
+  static String get socialBaseUrl => 'http://$_baseHost:4007';         // Social Features Service
 
   // Auth Service Endpoints
   static const String authFirebase = '/api/auth/firebase';
@@ -48,7 +94,7 @@ class ApiConstants {
   static const String referralComplete = '/api/referral/complete';
   static const String referralStats = '/api/referral/stats';
 
-  // Request timeout
-  static const Duration connectTimeout = Duration(seconds: 30);
-  static const Duration receiveTimeout = Duration(seconds: 30);
+  // Request timeout - Increased for better reliability
+  static const Duration connectTimeout = Duration(seconds: 60);
+  static const Duration receiveTimeout = Duration(seconds: 60);
 }
