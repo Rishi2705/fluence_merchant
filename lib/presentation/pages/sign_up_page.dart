@@ -14,7 +14,7 @@ class _SignUpPageState extends State<SignUpPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  String _selectedCountryCode = '+44';
+  final String _selectedCountryCode = '+44';
   bool _obscurePassword = true;
 
   @override

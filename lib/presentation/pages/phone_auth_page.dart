@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/theme/theme.dart';
 import '../../core/constants/api_constants.dart';
+import '../../utils/logger.dart';
 import 'onboarding_page.dart';
+import 'main_container_page.dart';
 
 /// Email authentication page for merchant login/signup
 class PhoneAuthPage extends StatefulWidget {
@@ -31,7 +33,15 @@ class _PhoneAuthPageState extends State<PhoneAuthPage> {
   }
 
   Future<void> _handleEmailAuth() async {
+    AppLogger.step(1, 'Starting email authentication process');
+    AppLogger.auth('Email auth initiated', data: {
+      'isLogin': _isLogin,
+      'email': _emailController.text.trim(),
+      'hasPassword': _passwordController.text.trim().isNotEmpty,
+    });
+
     if (!_formKey.currentState!.validate()) {
+      AppLogger.warning('Form validation failed');
       return;
     }
 
@@ -46,60 +56,87 @@ class _PhoneAuthPageState extends State<PhoneAuthPage> {
       UserCredential? userCredential;
       bool authSucceeded = false;
       
+      AppLogger.step(2, _isLogin ? 'Attempting Firebase login' : 'Attempting Firebase signup');
+      
       if (_isLogin) {
         // Login with existing account
         try {
+          AppLogger.firebase('Signing in with email and password');
           userCredential = await _auth.signInWithEmailAndPassword(
             email: email,
             password: password,
           );
           authSucceeded = true;
+          AppLogger.firebase('Firebase sign in successful', data: {
+            'uid': userCredential.user?.uid,
+            'email': userCredential.user?.email,
+          });
         } on FirebaseAuthException catch (e) {
+          AppLogger.error('Firebase authentication exception during login', error: e);
           // Re-throw Firebase errors (not Pigeon errors)
           rethrow;
         } catch (e) {
           // Ignore Pigeon errors and try to proceed
-          print('Sign in error (may be Pigeon): $e');
+          AppLogger.warning('Sign in error (may be Pigeon, continuing)', data: e);
           authSucceeded = true; // Assume success, will verify with currentUser
         }
       } else {
         // Create new account
         try {
+          AppLogger.firebase('Creating new account with email and password');
           userCredential = await _auth.createUserWithEmailAndPassword(
             email: email,
             password: password,
           );
           authSucceeded = true;
+          AppLogger.firebase('Firebase account creation successful', data: {
+            'uid': userCredential.user?.uid,
+            'email': userCredential.user?.email,
+          });
         } on FirebaseAuthException catch (e) {
+          AppLogger.error('Firebase authentication exception during signup', error: e);
           // Re-throw Firebase errors (not Pigeon errors)
           rethrow;
         } catch (e) {
           // Ignore Pigeon errors and try to proceed
-          print('Create account error (may be Pigeon): $e');
+          AppLogger.warning('Create account error (may be Pigeon, continuing)', data: e);
           authSucceeded = true; // Assume success, will verify with currentUser
         }
       }
 
       // Wait a bit for Firebase to complete
+      AppLogger.step(3, 'Waiting for Firebase to complete authentication');
       await Future.delayed(const Duration(milliseconds: 500));
       
       // Check current user regardless of credential
       final currentUser = _auth.currentUser;
-      print('Current user after auth: ${currentUser?.uid}');
+      AppLogger.step(4, 'Checking current Firebase user');
+      AppLogger.firebase('Current user status', data: {
+        'hasCurrentUser': currentUser != null,
+        'uid': currentUser?.uid,
+        'email': currentUser?.email,
+        'isEmailVerified': currentUser?.emailVerified,
+        'displayName': currentUser?.displayName,
+      });
       
       if (currentUser != null) {
-        print('Firebase auth successful, getting ID token...');
+        AppLogger.step(5, 'Firebase auth successful, getting ID token');
         // Get Firebase ID token
         String? firebaseIdToken;
         try {
+          AppLogger.firebase('Requesting Firebase ID token');
           firebaseIdToken = await currentUser.getIdToken();
-          print('Got Firebase ID token (full): $firebaseIdToken');
-          print('Firebase ID token length: ${firebaseIdToken?.length}');
-        } catch (e) {
-          print('Failed to get ID token: $e');
+          AppLogger.firebase('Firebase ID token obtained', data: {
+            'hasToken': firebaseIdToken != null,
+            'tokenLength': firebaseIdToken?.length,
+            'tokenPreview': firebaseIdToken != null ? '${firebaseIdToken.substring(0, 20)}...' : null,
+          });
+        } catch (e, stackTrace) {
+          AppLogger.error('Failed to get Firebase ID token', error: e, stackTrace: stackTrace);
         }
 
         if (firebaseIdToken == null) {
+          AppLogger.error('Firebase ID token is null, cannot proceed');
           setState(() {
             _isLoading = false;
           });
@@ -108,7 +145,16 @@ class _PhoneAuthPageState extends State<PhoneAuthPage> {
         }
 
         // Authenticate with backend Auth Service
-        print('Authenticating with backend at ${ApiConstants.authBaseUrl}${ApiConstants.authFirebase}');
+        AppLogger.step(6, 'Starting backend authentication');
+        final backendUrl = '${ApiConstants.authBaseUrl}${ApiConstants.authFirebase}';
+        AppLogger.api('Backend authentication URL', data: {
+          'url': backendUrl,
+          'authBaseUrl': ApiConstants.authBaseUrl,
+          'authFirebaseEndpoint': ApiConstants.authFirebase,
+          'currentHost': ApiConstants.currentHost,
+          'isUsingEmulatorHost': ApiConstants.isUsingEmulatorHost,
+          'isUsingPhysicalDeviceHost': ApiConstants.isUsingPhysicalDeviceHost,
+        });
         
         // Retry mechanism for connection timeouts
         int retryCount = 0;
@@ -118,16 +164,29 @@ class _PhoneAuthPageState extends State<PhoneAuthPage> {
         try {
           while (retryCount < maxRetries) {
             try {
-              print('Attempt ${retryCount + 1} of $maxRetries');
+              AppLogger.step(7, 'Backend auth attempt ${retryCount + 1} of $maxRetries');
               final dio = Dio(BaseOptions(
                 connectTimeout: const Duration(seconds: 60),
                 receiveTimeout: const Duration(seconds: 60),
               ));
-              response = await dio.post(
-                '${ApiConstants.authBaseUrl}${ApiConstants.authFirebase}',
-                data: {
-                  'idToken': firebaseIdToken,
+              
+              final requestData = {
+                'idToken': firebaseIdToken,
+              };
+              
+              AppLogger.networkRequest(
+                method: 'POST',
+                url: backendUrl,
+                headers: {'Content-Type': 'application/json'},
+                body: {
+                  'idToken': '${firebaseIdToken.substring(0, 20)}...', // Truncated for security
                 },
+              );
+
+              final stopwatch = Stopwatch()..start();
+              response = await dio.post(
+                backendUrl,
+                data: requestData,
                 options: Options(
                   headers: {
                     'Content-Type': 'application/json',
@@ -135,83 +194,134 @@ class _PhoneAuthPageState extends State<PhoneAuthPage> {
                   validateStatus: (status) => status! < 500,
                 ),
               );
+              stopwatch.stop();
+
+              AppLogger.networkResponse(
+                statusCode: response.statusCode ?? 0,
+                url: backendUrl,
+                body: response.data,
+                duration: stopwatch.elapsed,
+              );
+
+              AppLogger.success('Backend authentication request completed');
               break; // Success, exit retry loop
-            } catch (e) {
+            } catch (e, stackTrace) {
               retryCount++;
-              print('Attempt $retryCount failed: $e');
+              AppLogger.warning('Backend auth attempt $retryCount failed', data: e);
               
               // Check if it's a DioException and if it's a connection timeout
               if (e is DioException && e.type == DioExceptionType.connectionTimeout && retryCount < maxRetries) {
-                print('Connection timeout, retrying in ${retryCount * 2} seconds...');
-                await Future.delayed(Duration(seconds: retryCount * 2));
+                final waitTime = retryCount * 2;
+                AppLogger.warning('Connection timeout, retrying in $waitTime seconds...');
+                await Future.delayed(Duration(seconds: waitTime));
                 continue;
               } else {
+                AppLogger.error('Non-retryable error or max retries reached', error: e, stackTrace: stackTrace);
                 rethrow; // Re-throw if not a retryable timeout or max retries reached
               }
             }
           }
 
-          print('Backend response status: ${response?.statusCode}');
-          print('Backend response data: ${response?.data}');
+          AppLogger.step(8, 'Processing backend authentication response');
 
           if (response?.statusCode == 200 || response?.statusCode == 201) {
+            AppLogger.success('Backend authentication successful');
             final responseData = response!.data;
             final backendToken = responseData['token'];
             final needsProfileCompletion = responseData['needsProfileCompletion'] ?? false;
             
-            print('Backend JWT token (full): $backendToken');
-            print('Backend JWT token length: ${backendToken?.length}');
+            AppLogger.auth('Backend response parsed', data: {
+              'hasToken': backendToken != null,
+              'tokenLength': backendToken?.length,
+              'tokenPreview': backendToken != null ? '${backendToken.toString().substring(0, 20)}...' : null,
+              'needsProfileCompletion': needsProfileCompletion,
+              'userData': responseData['user'],
+            });
 
             if (mounted) {
               setState(() {
                 _isLoading = false;
               });
 
-              // Navigate to onboarding page with backend JWT token
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(
-                  builder: (context) => OnboardingPage(
-                    phoneNumber: currentUser.email ?? email,
-                    firebaseToken: backendToken, // Now using backend JWT token
+              if (needsProfileCompletion) {
+                AppLogger.step(9, 'User needs profile completion - navigating to onboarding page');
+                // Navigate to onboarding page with backend JWT token
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (context) => OnboardingPage(
+                      phoneNumber: currentUser.email ?? email,
+                      firebaseToken: backendToken, // Now using backend JWT token
+                    ),
                   ),
-                ),
-              );
+                );
+                AppLogger.success('Navigation to onboarding page completed');
+              } else {
+                AppLogger.step(9, 'User profile complete - navigating to main app');
+                // Navigate directly to main app
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (context) => const MainContainerPage(),
+                  ),
+                );
+                AppLogger.success('Navigation to main app completed');
+              }
             }
           } else {
+            AppLogger.error('Backend authentication failed', data: {
+              'statusCode': response?.statusCode,
+              'responseData': response?.data,
+            });
             setState(() {
               _isLoading = false;
             });
             final errorMessage = response?.data['error'] ?? 'Backend authentication failed';
             _showError(errorMessage);
           }
-        } catch (e) {
-          print('Backend auth error: $e');
+        } catch (e, stackTrace) {
+          AppLogger.error('Backend authentication failed with exception', error: e, stackTrace: stackTrace);
           setState(() {
             _isLoading = false;
           });
 
           String errorMessage = 'Failed to connect to authentication server';
           if (e is DioException) {
+            AppLogger.error('DioException details', data: {
+              'type': e.type.toString(),
+              'message': e.message,
+              'statusCode': e.response?.statusCode,
+              'responseData': e.response?.data,
+            });
+
             if (e.type == DioExceptionType.connectionTimeout) {
               errorMessage = 'Connection timeout after $maxRetries attempts. Please check your internet and ensure backend is running.';
             } else if (e.type == DioExceptionType.receiveTimeout) {
               errorMessage = 'Server is taking too long to respond.';
             } else if (e.response != null) {
-              print('Backend error response: ${e.response?.data}');
+              AppLogger.error('Backend error response details', data: e.response?.data);
               errorMessage = e.response!.data['error'] ?? 'Authentication server error: ${e.response!.statusCode}';
             }
           }
           
+          AppLogger.error('Showing error to user', data: {'errorMessage': errorMessage});
           _showError(errorMessage);
         }
       } else {
         // No user signed in, still show error
+        AppLogger.error('No current user found after Firebase authentication');
         setState(() {
           _isLoading = false;
         });
         _showError('Authentication failed. Please try again.');
       }
-    } on FirebaseAuthException catch (e) {
+    } on FirebaseAuthException catch (e, stackTrace) {
+      AppLogger.error('FirebaseAuthException caught', error: e, stackTrace: stackTrace);
+      AppLogger.error('FirebaseAuthException details', data: {
+        'code': e.code,
+        'message': e.message,
+        'email': e.email,
+        'credential': e.credential?.toString(),
+      });
+
       setState(() {
         _isLoading = false;
       });
@@ -236,10 +346,11 @@ class _PhoneAuthPageState extends State<PhoneAuthPage> {
         default:
           errorMessage = e.message ?? 'Authentication failed';
       }
+      AppLogger.error('Firebase auth error message', data: {'errorMessage': errorMessage});
       _showError(errorMessage);
-    } catch (e) {
+    } catch (e, stackTrace) {
       // Unexpected error - this should rarely happen since we handle Pigeon errors above
-      print('Unexpected error in _handleEmailAuth: $e');
+      AppLogger.error('Unexpected error in _handleEmailAuth', error: e, stackTrace: stackTrace);
       setState(() {
         _isLoading = false;
       });

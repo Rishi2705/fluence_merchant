@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../core/constants/app_constants.dart';
 
 class StatsPage extends StatefulWidget {
   const StatsPage({super.key});
@@ -341,7 +340,7 @@ class _StatsPageState extends State<StatsPage> {
               width: MediaQuery.of(context).size.width * 1.5, // 1.5x width for scrolling
               child: Column(
                 children: [
-                  Container(
+                  SizedBox(
                     height: 120,
                     child: CustomPaint(
                       painter: LineChartPainter(),

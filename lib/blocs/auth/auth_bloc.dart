@@ -1,6 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../repositories/auth_repository_impl.dart';
-import '../../models/user_model.dart';
+import '../../utils/logger.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
 
@@ -20,17 +20,23 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AuthCheckRequested event,
     Emitter<AuthState> emit,
   ) async {
+    AppLogger.auth('BLoC: Auth check requested');
     emit(const AuthLoading());
     
     try {
       final isAuth = _authRepository.isAuthenticated;
+      AppLogger.auth('BLoC: Authentication status checked', data: {'isAuthenticated': isAuth});
+      
       if (isAuth) {
         // User is authenticated, emit authenticated state
+        AppLogger.success('BLoC: User is authenticated');
         emit(const AuthAuthenticated(user: null));
       } else {
+        AppLogger.info('BLoC: User is not authenticated');
         emit(const AuthUnauthenticated());
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      AppLogger.error('BLoC: Auth check failed', error: e, stackTrace: stackTrace);
       emit(AuthError(message: e.toString()));
     }
   }
@@ -40,6 +46,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AuthSignInWithFirebase event,
     Emitter<AuthState> emit,
   ) async {
+    AppLogger.auth('BLoC: Firebase sign in requested', data: {
+      'hasIdToken': event.idToken.isNotEmpty,
+      'hasReferralCode': event.referralCode != null,
+    });
     emit(const AuthLoading());
     
     try {
@@ -48,12 +58,21 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         referralCode: event.referralCode,
       );
       
+      AppLogger.success('BLoC: Firebase sign in successful', data: {
+        'needsProfileCompletion': authResponse.needsProfileCompletion,
+        'hasUser': authResponse.user != null,
+        'userId': authResponse.user.id,
+      });
+      
       if (authResponse.needsProfileCompletion) {
+        AppLogger.info('BLoC: Profile completion needed');
         emit(AuthNeedsProfileCompletion(user: authResponse.user));
       } else {
+        AppLogger.success('BLoC: User fully authenticated');
         emit(AuthAuthenticated(user: authResponse.user));
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      AppLogger.error('BLoC: Firebase sign in failed', error: e, stackTrace: stackTrace);
       emit(AuthError(message: e.toString()));
     }
   }

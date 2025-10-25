@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/theme.dart';
 
 /// Password page that appears after login screen with Material Design 3
 class PasswordPage extends StatefulWidget {
@@ -25,7 +24,7 @@ class _PasswordPageState extends State<PasswordPage> {
     4,
         (index) => FocusNode(),
   );
-  bool _obscurePassword = true;
+  final bool _obscurePassword = true;
 
   @override
   Widget build(BuildContext context) {
@@ -76,7 +75,7 @@ class _PasswordPageState extends State<PasswordPage> {
                         ),
                       ),
                       // Profile image without border
-                      Container(
+                      SizedBox(
                         width: screenWidth * 0.26,
                         height: screenWidth * 0.26,
                         child: ClipOval(

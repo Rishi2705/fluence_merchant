@@ -73,10 +73,10 @@ class _MainContainerPageState extends State<MainContainerPage> {
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildNavItem(Icons.home_rounded, 'Home', 0),
-          _buildNavItem(Icons.account_balance_wallet_rounded, 'Wallet', 1),
-          _buildNavItem(Icons.bar_chart_rounded, 'Stats', 2),
-          _buildNavItem(Icons.person_outline_rounded, 'You', 3),
+          Flexible(child: _buildNavItem(Icons.home_rounded, 'Home', 0)),
+          Flexible(child: _buildNavItem(Icons.account_balance_wallet_rounded, 'Wallet', 1)),
+          Flexible(child: _buildNavItem(Icons.bar_chart_rounded, 'Stats', 2)),
+          Flexible(child: _buildNavItem(Icons.person_outline_rounded, 'You', 3)),
         ],
       ),
     );

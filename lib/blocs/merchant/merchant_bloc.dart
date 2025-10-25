@@ -1,6 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../repositories/merchant_repository.dart';
-import '../../models/merchant_model.dart';
+import '../../utils/logger.dart';
 import 'merchant_event.dart';
 import 'merchant_state.dart';
 
@@ -20,6 +20,12 @@ class MerchantBloc extends Bloc<MerchantEvent, MerchantState> {
     SubmitMerchantApplication event,
     Emitter<MerchantState> emit,
   ) async {
+    AppLogger.auth('BLoC: Merchant application submission requested', data: {
+      'businessName': event.businessName,
+      'businessType': event.businessType,
+      'contactEmail': event.contactEmail,
+      'contactPhone': event.contactPhone,
+    });
     emit(const MerchantLoading());
 
     try {
@@ -34,8 +40,14 @@ class MerchantBloc extends Bloc<MerchantEvent, MerchantState> {
         bankingInfo: event.bankingInfo,
       );
 
+      AppLogger.success('BLoC: Merchant application submission successful', data: {
+        'applicationId': application.id,
+        'businessName': application.businessName,
+        'status': application.status,
+      });
       emit(MerchantApplicationSubmitted(application: application));
-    } catch (e) {
+    } catch (e, stackTrace) {
+      AppLogger.error('BLoC: Merchant application submission failed', error: e, stackTrace: stackTrace);
       emit(MerchantError(message: e.toString()));
     }
   }
