@@ -1,50 +1,49 @@
 import 'package:equatable/equatable.dart';
 
 /// Base class for all events in the authentication BLoC.
-/// All auth events should extend this class.
 abstract class AuthEvent extends Equatable {
   const AuthEvent();
 
   @override
-  List<Object> get props => [];
+  List<Object?> get props => [];
 }
 
-/// Event triggered when user attempts to login.
-class LoginRequested extends AuthEvent {
-  final String email;
-  final String password;
+/// Event to check if user is authenticated
+class AuthCheckRequested extends AuthEvent {
+  const AuthCheckRequested();
+}
 
-  const LoginRequested({
-    required this.email,
-    required this.password,
+/// Event triggered when user signs in with Firebase
+class AuthSignInWithFirebase extends AuthEvent {
+  final String idToken;
+  final String? referralCode;
+
+  const AuthSignInWithFirebase({
+    required this.idToken,
+    this.referralCode,
   });
 
   @override
-  List<Object> get props => [email, password];
+  List<Object?> get props => [idToken, referralCode];
 }
 
-/// Event triggered when user attempts to logout.
-class LogoutRequested extends AuthEvent {
-  const LogoutRequested();
-}
-
-/// Event triggered to check authentication status.
-class AuthStatusRequested extends AuthEvent {
-  const AuthStatusRequested();
-}
-
-/// Event triggered when user attempts to register.
-class RegisterRequested extends AuthEvent {
-  final String email;
-  final String password;
+/// Event triggered when user completes profile
+class AuthCompleteProfile extends AuthEvent {
   final String name;
+  final String phone;
+  final String dateOfBirth;
 
-  const RegisterRequested({
-    required this.email,
-    required this.password,
+  const AuthCompleteProfile({
     required this.name,
+    required this.phone,
+    required this.dateOfBirth,
   });
 
   @override
-  List<Object> get props => [email, password, name];
+  List<Object?> get props => [name, phone, dateOfBirth];
+}
+
+/// Event triggered when user logs out
+class AuthLogoutRequested extends AuthEvent {
+  const AuthLogoutRequested();
 }

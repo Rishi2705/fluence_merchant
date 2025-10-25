@@ -1,79 +1,32 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../repositories/auth_repository.dart';
+import '../../repositories/auth_repository_impl.dart';
+import '../../models/user_model.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
 
 /// BLoC that manages authentication state and handles auth-related events.
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
-  final AuthRepository _authRepository;
+  final AuthRepositoryImpl _authRepository;
 
-  AuthBloc({required AuthRepository authRepository})
-      : _authRepository = authRepository,
-        super(const AuthInitial()) {
-    on<LoginRequested>(_onLoginRequested);
-    on<LogoutRequested>(_onLogoutRequested);
-    on<AuthStatusRequested>(_onAuthStatusRequested);
-    on<RegisterRequested>(_onRegisterRequested);
+  AuthBloc(this._authRepository) : super(const AuthInitial()) {
+    on<AuthCheckRequested>(_onAuthCheckRequested);
+    on<AuthSignInWithFirebase>(_onSignInWithFirebase);
+    on<AuthCompleteProfile>(_onCompleteProfile);
+    on<AuthLogoutRequested>(_onLogoutRequested);
   }
 
-  /// Handles login request event.
-  Future<void> _onLoginRequested(
-    LoginRequested event,
+  /// Checks if user is authenticated
+  Future<void> _onAuthCheckRequested(
+    AuthCheckRequested event,
     Emitter<AuthState> emit,
   ) async {
     emit(const AuthLoading());
     
     try {
-      final user = await _authRepository.login(
-        email: event.email,
-        password: event.password,
-      );
-      
-      if (user != null) {
-        emit(AuthAuthenticated(
-          userId: user.id,
-          email: user.email,
-          name: user.name,
-        ));
-      } else {
-        emit(const AuthError(message: 'Login failed. Please check your credentials.'));
-      }
-    } catch (e) {
-      emit(AuthError(message: e.toString()));
-    }
-  }
-
-  /// Handles logout request event.
-  Future<void> _onLogoutRequested(
-    LogoutRequested event,
-    Emitter<AuthState> emit,
-  ) async {
-    emit(const AuthLoading());
-    
-    try {
-      await _authRepository.logout();
-      emit(const AuthUnauthenticated());
-    } catch (e) {
-      emit(AuthError(message: e.toString()));
-    }
-  }
-
-  /// Handles auth status check event.
-  Future<void> _onAuthStatusRequested(
-    AuthStatusRequested event,
-    Emitter<AuthState> emit,
-  ) async {
-    emit(const AuthLoading());
-    
-    try {
-      final user = await _authRepository.getCurrentUser();
-      
-      if (user != null) {
-        emit(AuthAuthenticated(
-          userId: user.id,
-          email: user.email,
-          name: user.name,
-        ));
+      final isAuth = _authRepository.isAuthenticated;
+      if (isAuth) {
+        // User is authenticated, emit authenticated state
+        emit(const AuthAuthenticated(user: null));
       } else {
         emit(const AuthUnauthenticated());
       }
@@ -82,29 +35,59 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  /// Handles register request event.
-  Future<void> _onRegisterRequested(
-    RegisterRequested event,
+  /// Handles Firebase sign-in
+  Future<void> _onSignInWithFirebase(
+    AuthSignInWithFirebase event,
     Emitter<AuthState> emit,
   ) async {
     emit(const AuthLoading());
     
     try {
-      final user = await _authRepository.register(
-        email: event.email,
-        password: event.password,
-        name: event.name,
+      final authResponse = await _authRepository.signInWithFirebase(
+        idToken: event.idToken,
+        referralCode: event.referralCode,
       );
       
-      if (user != null) {
-        emit(AuthAuthenticated(
-          userId: user.id,
-          email: user.email,
-          name: user.name,
-        ));
+      if (authResponse.needsProfileCompletion) {
+        emit(AuthNeedsProfileCompletion(user: authResponse.user));
       } else {
-        emit(const AuthError(message: 'Registration failed. Please try again.'));
+        emit(AuthAuthenticated(user: authResponse.user));
       }
+    } catch (e) {
+      emit(AuthError(message: e.toString()));
+    }
+  }
+
+  /// Handles profile completion
+  Future<void> _onCompleteProfile(
+    AuthCompleteProfile event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(const AuthLoading());
+    
+    try {
+      final user = await _authRepository.completeProfile(
+        name: event.name,
+        phone: event.phone,
+        dateOfBirth: event.dateOfBirth,
+      );
+      
+      emit(AuthAuthenticated(user: user));
+    } catch (e) {
+      emit(AuthError(message: e.toString()));
+    }
+  }
+
+  /// Handles logout
+  Future<void> _onLogoutRequested(
+    AuthLogoutRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(const AuthLoading());
+    
+    try {
+      await _authRepository.logout();
+      emit(const AuthUnauthenticated());
     } catch (e) {
       emit(AuthError(message: e.toString()));
     }
