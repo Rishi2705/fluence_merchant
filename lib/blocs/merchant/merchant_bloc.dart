@@ -1,4 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../models/merchant_model.dart';
 import '../../repositories/merchant_repository.dart';
 import '../../utils/logger.dart';
 import 'merchant_event.dart';
@@ -13,6 +14,8 @@ class MerchantBloc extends Bloc<MerchantEvent, MerchantState> {
     on<FetchMerchantProfile>(_onFetchProfile);
     on<UpdateMerchantProfile>(_onUpdateProfile);
     on<FetchMerchantApplications>(_onFetchApplications);
+    on<FetchMerchantAnalytics>(_onFetchAnalytics);
+    on<FetchProfileWithAnalytics>(_onFetchProfileWithAnalytics);
   }
 
   /// Handles merchant application submission
@@ -94,6 +97,72 @@ class MerchantBloc extends Bloc<MerchantEvent, MerchantState> {
       emit(MerchantApplicationsLoaded(applications: applications));
     } catch (e) {
       emit(MerchantError(message: e.toString()));
+    }
+  }
+
+  /// Handles fetching merchant analytics
+  Future<void> _onFetchAnalytics(
+    FetchMerchantAnalytics event,
+    Emitter<MerchantState> emit,
+  ) async {
+    AppLogger.step(1, 'MerchantBloc: Fetching merchant analytics');
+    emit(const MerchantLoading());
+
+    try {
+      final analytics = await _merchantRepository.getAnalytics();
+      
+      AppLogger.success('MerchantBloc: Analytics fetched successfully', data: {
+        'hasApplicationStats': analytics.applicationStats != null,
+        'hasProfileStats': analytics.profileStats != null,
+        'hasPerformanceMetrics': analytics.performanceMetrics != null,
+        'hasSocialPerformance': analytics.socialPerformance != null,
+      });
+      
+      emit(MerchantAnalyticsLoaded(analytics: analytics));
+    } catch (e, stackTrace) {
+      AppLogger.error('MerchantBloc: Failed to fetch analytics', error: e, stackTrace: stackTrace);
+      emit(MerchantError(message: e.toString()));
+    }
+  }
+
+  /// Handles fetching profile with analytics
+  Future<void> _onFetchProfileWithAnalytics(
+    FetchProfileWithAnalytics event,
+    Emitter<MerchantState> emit,
+  ) async {
+    AppLogger.step(1, 'MerchantBloc: Fetching profile with analytics');
+    emit(const MerchantLoading());
+
+    try {
+      // Fetch both profile and analytics in parallel
+      final results = await Future.wait([
+        _merchantRepository.getProfile(),
+        _merchantRepository.getAnalytics(),
+      ]);
+
+      final profile = results[0] as MerchantProfile;
+      final analytics = results[1] as MerchantAnalytics;
+
+      AppLogger.success('MerchantBloc: Profile with analytics loaded', data: {
+        'businessName': profile.businessName,
+        'isActive': profile.isActive,
+        'hasAnalytics': analytics.performanceMetrics != null,
+      });
+
+      emit(MerchantProfileWithAnalytics(
+        profile: profile,
+        analytics: analytics,
+      ));
+    } catch (e, stackTrace) {
+      AppLogger.error('MerchantBloc: Failed to fetch profile with analytics', error: e, stackTrace: stackTrace);
+      
+      // Try to at least load the profile
+      try {
+        final profile = await _merchantRepository.getProfile();
+        emit(MerchantProfileLoaded(profile: profile));
+      } catch (profileError) {
+        emit(MerchantError(message: e.toString()));
+      }
     }
   }
 }

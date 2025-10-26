@@ -68,3 +68,35 @@ class MerchantError extends MerchantState {
   @override
   List<Object?> get props => [message];
 }
+
+/// Profile not found state (user needs to complete onboarding)
+class MerchantProfileNotFound extends MerchantState {
+  const MerchantProfileNotFound();
+
+  @override
+  List<Object?> get props => [];
+}
+
+/// Analytics loaded state
+class MerchantAnalyticsLoaded extends MerchantState {
+  final MerchantAnalytics analytics;
+
+  const MerchantAnalyticsLoaded({required this.analytics});
+
+  @override
+  List<Object?> get props => [analytics];
+}
+
+/// Profile with analytics loaded state
+class MerchantProfileWithAnalytics extends MerchantState {
+  final MerchantProfile profile;
+  final MerchantAnalytics analytics;
+
+  const MerchantProfileWithAnalytics({
+    required this.profile,
+    required this.analytics,
+  });
+
+  @override
+  List<Object?> get props => [profile, analytics];
+}

@@ -66,8 +66,12 @@ class ApiConstants {
 
   // Merchant Service Endpoints
   static const String merchantApplications = '/api/applications';
+  static const String merchantApplicationStats = '/api/applications/stats';
   static const String merchantProfile = '/api/profiles/me';
+  static const String merchantUpdateProfile = '/api/profiles/me';
   static const String merchantProfiles = '/api/profiles';
+  static const String merchantProfileStats = '/api/profiles/stats';
+  static const String merchantAdminStats = '/api/admin/stats';
 
   // Cashback Service Endpoints
   static const String budgets = '/api/budgets';
@@ -75,11 +79,23 @@ class ApiConstants {
   static const String transactions = '/api/transactions';
   static const String disputes = '/api/disputes';
 
-  // Wallet Service Endpoints
+  // Points Wallet Service Endpoints (Port 4005)
+  // Wallet endpoints
   static const String walletBalance = '/api/wallet/balance';
-  static const String walletTransactions = '/api/wallet/transactions';
-  static const String walletTransfer = '/api/wallet/transfer';
-  static const String walletWithdraw = '/api/wallet/withdraw';
+  static const String walletBalanceSummary = '/api/wallet/balance/summary';
+  static const String walletBalanceHistory = '/api/wallet/balance/history';
+  static const String walletBalanceTrends = '/api/wallet/balance/trends';
+  static const String walletBalanceAlerts = '/api/wallet/balance/alerts';
+  static const String walletCheckBalance = '/api/wallet/check-balance';
+  
+  // Points endpoints
+  static const String pointsTransactions = '/api/points/transactions';
+  static const String pointsTransactionById = '/api/points/transactions'; // + /:id
+  static const String pointsEarn = '/api/points/earn';
+  static const String pointsStats = '/api/points/stats';
+  static const String pointsStatsTotalEarned = '/api/points/stats/total-earned';
+  static const String pointsStatsTotalRedeemed = '/api/points/stats/total-redeemed';
+  static const String pointsDailySummary = '/api/points/stats/daily-summary';
 
   // Notification Service Endpoints
   static const String notifications = '/api/notifications';
@@ -93,6 +109,16 @@ class ApiConstants {
   static const String referralValidate = '/api/referral/code/validate';
   static const String referralComplete = '/api/referral/complete';
   static const String referralStats = '/api/referral/stats';
+
+  // Social Service Endpoints
+  static const String socialAnalytics = '/api/social/analytics';
+  static const String socialMerchantAnalytics = '/api/social/merchant/analytics';
+  static const String socialMerchantReports = '/api/social/merchant/reports';
+
+  // Cashback Service Analytics Endpoints
+  static const String campaignsActive = '/api/campaigns';
+  static const String campaignAnalytics = '/api/campaigns'; // + /:id/analytics
+  static const String transactionAnalytics = '/api/transactions/analytics';
 
   // Request timeout - Increased for better reliability
   static const Duration connectTimeout = Duration(seconds: 60);

@@ -10,6 +10,7 @@ class ApiService {
   late final Dio _walletDio;
   late final Dio _notificationDio;
   late final Dio _referralDio;
+  late final Dio _socialDio;
   
   String? _authToken;
 
@@ -20,6 +21,7 @@ class ApiService {
     _walletDio = _createDio(ApiConstants.walletBaseUrl);
     _notificationDio = _createDio(ApiConstants.notificationBaseUrl);
     _referralDio = _createDio(ApiConstants.referralBaseUrl);
+    _socialDio = _createDio(ApiConstants.socialBaseUrl);
     
     _loadToken();
   }
@@ -187,6 +189,8 @@ class ApiService {
         return _notificationDio;
       case 'referral':
         return _referralDio;
+      case 'social':
+        return _socialDio;
       default:
         throw ArgumentError('Unknown service: $service');
     }

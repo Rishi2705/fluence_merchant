@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/theme.dart';
+import '../../core/di/service_locator.dart';
+import '../../services/api_service_new.dart';
+import '../../utils/logger.dart';
 import 'phone_auth_page.dart';
 import 'onboarding_page.dart';
+import 'main_container_page.dart';
 
 /// Splash screen widget for the DonePay app.
 /// Displays the DonePay logo with branding and automatically navigates to phone authentication.
@@ -17,15 +23,79 @@ class _SplashPageState extends State<SplashPage> {
   @override
   void initState() {
     super.initState();
-    // Navigate to phone auth page after 2 seconds
-    Timer(const Duration(seconds: 2), () {
+    _checkAuthenticationStatus();
+  }
+
+  Future<void> _checkAuthenticationStatus() async {
+    AppLogger.step(1, 'SplashPage: Checking authentication status');
+    
+    try {
+      // Wait for splash screen display
+      await Future.delayed(const Duration(seconds: 2));
+      
+      if (!mounted) return;
+      
+      // Check if user has a saved auth token
+      AppLogger.step(2, 'SplashPage: Checking for saved auth token');
+      final prefs = await SharedPreferences.getInstance();
+      final savedToken = prefs.getString('auth_token');
+      
+      AppLogger.info('SplashPage: Auth token check', data: {
+        'hasToken': savedToken != null,
+        'tokenLength': savedToken?.length,
+      });
+      
+      // Check Firebase auth state
+      AppLogger.step(3, 'SplashPage: Checking Firebase auth state');
+      final currentUser = FirebaseAuth.instance.currentUser;
+      
+      AppLogger.firebase('SplashPage: Firebase user status', data: {
+        'hasCurrentUser': currentUser != null,
+        'uid': currentUser?.uid,
+        'email': currentUser?.email,
+        'isEmailVerified': currentUser?.emailVerified,
+      });
+      
+      if (savedToken != null && currentUser != null) {
+        AppLogger.success('SplashPage: User is authenticated, restoring session');
+        
+        // Restore token to API service
+        AppLogger.step(4, 'SplashPage: Restoring token to API service');
+        final apiService = getIt<ApiService>();
+        await apiService.setToken(savedToken);
+        
+        AppLogger.success('SplashPage: Session restored, navigating to main app');
+        
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const MainContainerPage()),
+          );
+        }
+      } else {
+        AppLogger.info('SplashPage: No valid session found, navigating to auth page', data: {
+          'hasToken': savedToken != null,
+          'hasFirebaseUser': currentUser != null,
+        });
+        
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const PhoneAuthPage()),
+          );
+        }
+      }
+    } catch (e, stackTrace) {
+      AppLogger.error('SplashPage: Error checking auth status', error: e, stackTrace: stackTrace);
+      
+      // On error, navigate to auth page
       if (mounted) {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const PhoneAuthPage()),
         );
       }
-    });
+    }
   }
 
   @override
