@@ -72,3 +72,13 @@ class UpdateMerchantProfile extends MerchantEvent {
 class FetchMerchantApplications extends MerchantEvent {
   const FetchMerchantApplications();
 }
+
+/// Event to fetch merchant analytics
+class FetchMerchantAnalytics extends MerchantEvent {
+  const FetchMerchantAnalytics();
+}
+
+/// Event to fetch profile with analytics
+class FetchProfileWithAnalytics extends MerchantEvent {
+  const FetchProfileWithAnalytics();
+}

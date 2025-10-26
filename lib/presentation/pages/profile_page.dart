@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../core/constants/api_constants.dart';
+import '../../core/di/service_locator.dart';
+import '../../services/api_service_new.dart';
+import '../../blocs/merchant/merchant_bloc.dart';
+import '../../blocs/merchant/merchant_event.dart';
+import '../../blocs/merchant/merchant_state.dart';
+import '../../models/merchant_model.dart';
+import '../../utils/logger.dart';
+import 'phone_auth_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -15,72 +22,115 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  String _businessName = 'Meth Merchant';
+  String _businessName = 'Merchant';
   String _email = '';
   String _phone = '';
   String _category = '';
   File? _profileImage;
   bool _hasDraft = false;
-  bool _hasBackendProfile = false;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadProfileData();
+    AppLogger.step(1, 'ProfilePage: Initializing profile page');
+    // Load merchant profile with analytics from backend
+    context.read<MerchantBloc>().add(const FetchProfileWithAnalytics());
+    // Also load draft data as fallback
+    _loadDraftData();
   }
 
-  Future<void> _loadProfileData() async {
-    // First try to load from backend
-    await _loadBackendProfile();
-    
-    // If no backend profile, load draft data
-    if (!_hasBackendProfile) {
-      await _loadDraftData();
-    }
-    
-    setState(() {
-      _isLoading = false;
-    });
-  }
-
-  Future<void> _loadBackendProfile() async {
+  Future<void> _handleSignOut() async {
+    AppLogger.step(1, 'ProfilePage: User initiated sign out');
     try {
-      final dio = Dio();
+      AppLogger.step(2, 'ProfilePage: Clearing auth token');
+      // Clear auth token
+      final apiService = getIt<ApiService>();
+      await apiService.clearToken();
       
-      // Get Firebase token for authorization
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser != null) {
-        final token = await currentUser.getIdToken();
-        dio.options.headers['Authorization'] = 'Bearer $token';
+      AppLogger.step(3, 'ProfilePage: Signing out from Firebase');
+      // Sign out from Firebase
+      await FirebaseAuth.instance.signOut();
+      
+      AppLogger.step(4, 'ProfilePage: Clearing SharedPreferences');
+      // Clear SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      
+      AppLogger.success('ProfilePage: Sign out successful, navigating to phone auth');
+      // Navigate to phone auth page
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const PhoneAuthPage()),
+          (route) => false,
+        );
       }
-
-      // Fetch profile from backend
-      final response = await dio.get(
-        '${ApiConstants.merchantBaseUrl}/api/profiles/me',
-        options: Options(
-          validateStatus: (status) => status! < 500,
-        ),
-      );
-
-      if (response.statusCode == 200 && response.data['success'] == true) {
-        final profileData = response.data['data'];
-        
-        setState(() {
-          _businessName = profileData['businessName'] ?? 'Merchant';
-          _email = profileData['contactEmail'] ?? '';
-          _phone = profileData['contactPhone'] ?? '';
-          _category = profileData['businessType'] ?? '';
-          _hasBackendProfile = true;
-        });
+    } catch (e, stackTrace) {
+      AppLogger.error('ProfilePage: Sign out failed', error: e, stackTrace: stackTrace);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error signing out: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
       }
-    } catch (e) {
-      print('Error loading backend profile: $e');
-      // Continue to load draft data if backend fails
     }
+  }
+
+  Widget _buildNoProfileUI() {
+    AppLogger.info('ProfilePage: Rendering no profile UI');
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.business_outlined,
+              size: 80,
+              color: AppColors.grey400,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Complete Your Profile',
+              style: AppTextStyles.headlineSmall.copyWith(
+                color: AppColors.onBackground,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Please complete your merchant application to access your profile',
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: AppColors.grey600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton(
+              onPressed: () {
+                AppLogger.step(1, 'ProfilePage: User clicked Complete Application button');
+                // Navigate to onboarding
+                Navigator.of(context).pushNamed('/onboarding');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.fluenceGold,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 48,
+                  vertical: 16,
+                ),
+              ),
+              child: const Text('Complete Application'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _loadDraftData() async {
+    AppLogger.step(1, 'ProfilePage: Loading draft data from SharedPreferences');
     try {
       final prefs = await SharedPreferences.getInstance();
       
@@ -89,6 +139,14 @@ class _ProfilePageState extends State<ProfilePage> {
       final phone = prefs.getString('draft_phone');
       final category = prefs.getString('draft_category');
       final profileImagePath = prefs.getString('draft_profile_image');
+      
+      AppLogger.info('ProfilePage: Draft data retrieved', data: {
+        'hasBusinessName': businessName != null && businessName.isNotEmpty,
+        'hasEmail': email != null && email.isNotEmpty,
+        'hasPhone': phone != null && phone.isNotEmpty,
+        'hasCategory': category != null && category.isNotEmpty,
+        'hasProfileImage': profileImagePath != null && profileImagePath.isNotEmpty,
+      });
       
       setState(() {
         if (businessName != null && businessName.isNotEmpty) {
@@ -105,11 +163,24 @@ class _ProfilePageState extends State<ProfilePage> {
           _category = category;
         }
         if (profileImagePath != null && profileImagePath.isNotEmpty) {
-          _profileImage = File(profileImagePath);
+          final file = File(profileImagePath);
+          // Only set if file actually exists
+          if (file.existsSync()) {
+            _profileImage = file;
+            AppLogger.info('ProfilePage: Profile image loaded from draft');
+          } else {
+            AppLogger.warning('ProfilePage: Draft profile image path exists but file not found');
+          }
         }
       });
-    } catch (e) {
-      print('Error loading draft data: $e');
+      
+      if (_hasDraft) {
+        AppLogger.success('ProfilePage: Draft data loaded successfully');
+      } else {
+        AppLogger.info('ProfilePage: No draft data found');
+      }
+    } catch (e, stackTrace) {
+      AppLogger.error('ProfilePage: Error loading draft data', error: e, stackTrace: stackTrace);
     }
   }
 
@@ -117,55 +188,136 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.white,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // White background header
-            Container(
-              width: double.infinity,
-              color: AppColors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-              child: _buildHeader(),
-            ),
-            // Blue background content
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFF5F9FC),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(0),
-                    topRight: Radius.circular(0),
-                  ),
+      body: BlocConsumer<MerchantBloc, MerchantState>(
+        listener: (context, state) {
+          AppLogger.info('ProfilePage: BLoC state changed', data: {
+            'state': state.runtimeType.toString(),
+          });
+          
+          if (state is MerchantError) {
+            AppLogger.error('ProfilePage: Showing error to user', data: {
+              'message': state.message,
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.message),
+                backgroundColor: AppColors.error,
+              ),
+            );
+          } else if (state is MerchantProfileNotFound) {
+            AppLogger.warning('ProfilePage: Profile not found - user needs to complete onboarding');
+          } else if (state is MerchantProfileLoaded) {
+            AppLogger.success('ProfilePage: Profile loaded from backend', data: {
+              'businessName': state.profile.businessName,
+              'businessType': state.profile.businessType,
+              'hasEmail': state.profile.contactEmail != null,
+              'hasPhone': state.profile.contactPhone != null,
+            });
+          }
+        },
+        builder: (context, state) {
+          // Update local state from BLoC
+          MerchantProfile? profile;
+          MerchantAnalytics? analytics;
+          
+          if (state is MerchantProfileWithAnalytics) {
+            profile = state.profile;
+            analytics = state.analytics;
+            _businessName = profile.businessName;
+            _email = profile.contactEmail ?? _email;
+            _phone = profile.contactPhone ?? _phone;
+            _category = profile.businessType;
+            _isLoading = false;
+          } else if (state is MerchantProfileLoaded) {
+            profile = state.profile;
+            _businessName = profile.businessName;
+            _email = profile.contactEmail ?? _email;
+            _phone = profile.contactPhone ?? _phone;
+            _category = profile.businessType;
+            _isLoading = false;
+          } else if (state is MerchantProfileNotFound) {
+            _isLoading = false;
+          } else if (state is MerchantLoading) {
+            _isLoading = true;
+          } else if (state is MerchantError) {
+            _isLoading = false;
+          }
+
+          return SafeArea(
+            child: Column(
+              children: [
+                // White background header
+                Container(
+                  width: double.infinity,
+                  color: AppColors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+                  child: _buildHeader(),
                 ),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.only(top: 24, bottom: 100),
-                  child: Center(
-                    child: SizedBox(
-                      width: MediaQuery.of(context).size.width * 0.8,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildProfileCard(),
-                const SizedBox(height: 24),
-                _buildStatsRow(),
-                const SizedBox(height: 24),
-                _buildContactInformation(),
-                const SizedBox(height: 24),
-                _buildAccountSection(),
-                const SizedBox(height: 24),
-                _buildSettingsSection(),
-                      const SizedBox(height: 24),
-                      _buildSignOutButton(),
-                        ],
+                // Blue background content
+                Expanded(
+                  child: Container(
+                    width: double.infinity,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF5F9FC),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(0),
+                        topRight: Radius.circular(0),
                       ),
                     ),
+                    child: _isLoading
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.fluenceGold,
+                            ),
+                          )
+                        : state is MerchantProfileNotFound
+                            ? _buildNoProfileUI()
+                            : RefreshIndicator(
+                            onRefresh: () async {
+                              AppLogger.step(1, 'ProfilePage: User triggered pull-to-refresh');
+                              context.read<MerchantBloc>().add(const FetchProfileWithAnalytics());
+                            },
+                            color: AppColors.fluenceGold,
+                            child: SingleChildScrollView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.only(top: 24, bottom: 100),
+                              child: Center(
+                                child: SizedBox(
+                                  width: MediaQuery.of(context).size.width * 0.8,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      _buildProfileCard(),
+                                      const SizedBox(height: 24),
+                                      if (analytics?.performanceMetrics != null)
+                                        _buildPerformanceMetricsCard(analytics!.performanceMetrics!),
+                                      if (analytics?.performanceMetrics != null)
+                                        const SizedBox(height: 24),
+                                      if (analytics?.socialPerformance != null)
+                                        _buildSocialPerformanceCard(analytics!.socialPerformance!),
+                                      if (analytics?.socialPerformance != null)
+                                        const SizedBox(height: 24),
+                                      _buildStatsRow(profile: profile, analytics: analytics),
+                                      const SizedBox(height: 24),
+                                      _buildContactInformation(),
+                                      const SizedBox(height: 24),
+                                      _buildAccountSection(),
+                                      const SizedBox(height: 24),
+                                      _buildSettingsSection(),
+                                      const SizedBox(height: 24),
+                                      _buildSignOutButton(),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -245,10 +397,16 @@ class _ProfilePageState extends State<ProfilePage> {
                   border: Border.all(color: AppColors.white, width: 3),
                 ),
                 child: ClipOval(
-                  child: _profileImage != null
+                  child: _profileImage != null && _profileImage!.existsSync()
                       ? Image.file(
                           _profileImage!,
                           fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              color: AppColors.white,
+                              child: const Icon(Icons.person, size: 40, color: AppColors.grey600),
+                            );
+                          },
                         )
                       : Image.asset(
                           'assets/images/profile_placeholder.png',
@@ -349,14 +507,20 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildStatsRow() {
+  Widget _buildStatsRow({MerchantProfile? profile, MerchantAnalytics? analytics}) {
+    final totalSales = profile?.totalSales?.toString() ?? 
+                      analytics?.performanceMetrics?.totalTransactions.toString() ?? 
+                      '156';
+    final rating = profile?.rating?.toStringAsFixed(1) ?? '4.8';
+    final score = '92'; // TODO: Calculate from analytics
+    
     return Row(
       children: [
-        Expanded(child: _buildStatCard('156', 'Total Sales')),
+        Expanded(child: _buildStatCard(totalSales, 'Total Sales')),
         const SizedBox(width: 12),
-        Expanded(child: _buildStatCard('4.8', 'Rating ⭐')),
+        Expanded(child: _buildStatCard(rating, 'Rating ⭐')),
         const SizedBox(width: 12),
-        Expanded(child: _buildStatCard('92', 'Score 💯')),
+        Expanded(child: _buildStatCard(score, 'Score 💯')),
       ],
     );
   }
@@ -625,48 +789,66 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildMenuItem(IconData icon, String title, Color bgColor, Color iconColor, {String? subtitle}) {
-    return Row(
-      children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(12),
+    return InkWell(
+      onTap: () {
+        AppLogger.step(1, 'ProfilePage: User tapped menu item', data: {
+          'menuItem': title,
+        });
+        // TODO: Navigate to respective pages
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$title - Coming soon!'),
+            duration: const Duration(seconds: 1),
           ),
-          child: Icon(icon, color: iconColor, size: 22),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: AppTextStyles.bodyMedium.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.onBackground,
-                ),
+        );
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(12),
               ),
-              if (subtitle != null) ...[
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: AppTextStyles.labelSmall.copyWith(
-                    color: AppColors.grey600,
-                    fontSize: 11,
+              child: Icon(icon, color: iconColor, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.onBackground,
+                    ),
                   ),
-                ),
-              ],
-            ],
-          ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: AppTextStyles.labelSmall.copyWith(
+                        color: AppColors.grey600,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right,
+              color: AppColors.grey400,
+              size: 20,
+            ),
+          ],
         ),
-        const Icon(
-          Icons.chevron_right,
-          color: AppColors.grey400,
-          size: 20,
-        ),
-      ],
+      ),
     );
   }
 
@@ -675,6 +857,7 @@ class _ProfilePageState extends State<ProfilePage> {
       width: double.infinity,
       child: ElevatedButton(
         onPressed: () {
+          AppLogger.step(1, 'ProfilePage: User clicked sign out button');
           // Show sign out confirmation dialog
           showDialog(
             context: context,
@@ -683,15 +866,19 @@ class _ProfilePageState extends State<ProfilePage> {
               content: const Text('Are you sure you want to sign out?'),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () {
+                    AppLogger.info('ProfilePage: User cancelled sign out');
+                    Navigator.pop(context);
+                  },
                   child: const Text('Cancel'),
                 ),
                 TextButton(
-                  onPressed: () {
+                  onPressed: () async {
+                    AppLogger.step(2, 'ProfilePage: User confirmed sign out');
                     Navigator.pop(context);
-                    // TODO: Implement sign out logic
+                    await _handleSignOut();
                   },
-                  child: const Text('Sign Out'),
+                  child: const Text('Sign Out', style: TextStyle(color: AppColors.error)),
                 ),
               ],
             ),
@@ -721,6 +908,304 @@ class _ProfilePageState extends State<ProfilePage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildPerformanceMetricsCard(MerchantPerformanceMetrics metrics) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppColors.fluenceGold, AppColors.fluenceGold.withOpacity(0.8)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.fluenceGold.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.trending_up,
+                color: AppColors.white,
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Performance Metrics',
+                style: AppTextStyles.titleMedium.copyWith(
+                  color: AppColors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetricItem(
+                  'Total Revenue',
+                  '${metrics.totalRevenue.toStringAsFixed(0)} AED',
+                  Icons.attach_money,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildMetricItem(
+                  'Monthly Revenue',
+                  '${metrics.monthlyRevenue.toStringAsFixed(0)} AED',
+                  Icons.calendar_today,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetricItem(
+                  'Total Transactions',
+                  metrics.totalTransactions.toString(),
+                  Icons.receipt_long,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildMetricItem(
+                  'Avg Transaction',
+                  '${metrics.averageTransactionValue.toStringAsFixed(0)} AED',
+                  Icons.analytics,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetricItem(
+                  'Total Customers',
+                  metrics.totalCustomers.toString(),
+                  Icons.people,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildMetricItem(
+                  'Retention Rate',
+                  '${metrics.customerRetentionRate.toStringAsFixed(1)}%',
+                  Icons.loyalty,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricItem(String label, String value, IconData icon) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              icon,
+              color: AppColors.white.withOpacity(0.8),
+              size: 16,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: AppTextStyles.labelSmall.copyWith(
+                color: AppColors.white.withOpacity(0.9),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: AppTextStyles.titleMedium.copyWith(
+            color: AppColors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSocialPerformanceCard(SocialMediaPerformance social) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.grey200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.share,
+                color: AppColors.fluenceGold,
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Social Media Performance',
+                style: AppTextStyles.titleMedium.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: _buildSocialStatCard(
+                  social.totalPosts.toString(),
+                  'Posts',
+                  Icons.article,
+                  const Color(0xFFE8F4FA),
+                  AppColors.info,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildSocialStatCard(
+                  social.totalLikes.toString(),
+                  'Likes',
+                  Icons.favorite,
+                  const Color(0xFFFFE8E8),
+                  AppColors.error,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildSocialStatCard(
+                  social.followers.toString(),
+                  'Followers',
+                  Icons.people,
+                  const Color(0xFFE8F9F0),
+                  AppColors.success,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.fluenceGold.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildSocialMetric(
+                  'Engagement',
+                  '${social.engagementRate.toStringAsFixed(1)}%',
+                  Icons.trending_up,
+                ),
+                Container(
+                  width: 1,
+                  height: 40,
+                  color: AppColors.grey300,
+                ),
+                _buildSocialMetric(
+                  'Reach Growth',
+                  '${social.reachGrowth.toStringAsFixed(1)}%',
+                  Icons.show_chart,
+                ),
+                Container(
+                  width: 1,
+                  height: 40,
+                  color: AppColors.grey300,
+                ),
+                _buildSocialMetric(
+                  'Total Engagements',
+                  social.totalEngagements.toString(),
+                  Icons.touch_app,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSocialStatCard(String value, String label, IconData icon, Color bgColor, Color iconColor) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: iconColor, size: 24),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: AppTextStyles.titleMedium.copyWith(
+              fontWeight: FontWeight.bold,
+              color: AppColors.onBackground,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: AppTextStyles.labelSmall.copyWith(
+              color: AppColors.grey600,
+              fontSize: 10,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSocialMetric(String label, String value, IconData icon) {
+    return Column(
+      children: [
+        Icon(
+          icon,
+          color: AppColors.fluenceGold,
+          size: 20,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: AppTextStyles.titleSmall.copyWith(
+            fontWeight: FontWeight.bold,
+            color: AppColors.onBackground,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: AppTextStyles.labelSmall.copyWith(
+            color: AppColors.grey600,
+            fontSize: 10,
+          ),
+        ),
+      ],
     );
   }
 }

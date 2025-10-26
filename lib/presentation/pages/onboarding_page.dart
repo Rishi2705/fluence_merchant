@@ -1,10 +1,12 @@
-import 'package:flutter/material.dart';
 import 'dart:io';
+
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:dio/dio.dart';
-import '../../core/theme/theme.dart';
+
 import '../../core/constants/api_constants.dart';
+import '../../core/theme/theme.dart';
 import '../../utils/logger.dart';
 import 'main_container_page.dart';
 
@@ -13,11 +15,7 @@ class OnboardingPage extends StatefulWidget {
   final String? phoneNumber;
   final String? firebaseToken;
 
-  const OnboardingPage({
-    super.key,
-    this.phoneNumber,
-    this.firebaseToken,
-  });
+  const OnboardingPage({super.key, this.phoneNumber, this.firebaseToken});
 
   @override
   State<OnboardingPage> createState() => _OnboardingPageState();
@@ -91,13 +89,16 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   Future<void> _submitApplication() async {
     AppLogger.step(1, 'Starting merchant application submission from UI');
-    AppLogger.auth('Application submission initiated', data: {
-      'businessName': _businessNameController.text.trim(),
-      'selectedCategory': _selectedCategory,
-      'email': _emailController.text.trim(),
-      'phone': _phoneController.text.trim(),
-      'hasFirebaseToken': widget.firebaseToken != null,
-    });
+    AppLogger.auth(
+      'Application submission initiated',
+      data: {
+        'businessName': _businessNameController.text.trim(),
+        'selectedCategory': _selectedCategory,
+        'email': _emailController.text.trim(),
+        'phone': _phoneController.text.trim(),
+        'hasFirebaseToken': widget.firebaseToken != null,
+      },
+    );
 
     if (!_formKey.currentState!.validate()) {
       AppLogger.warning('Form validation failed');
@@ -130,65 +131,81 @@ class _OnboardingPageState extends State<OnboardingPage> {
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
-        return const Center(
-          child: CircularProgressIndicator(),
-        );
+        return const Center(child: CircularProgressIndicator());
       },
     );
 
     try {
       AppLogger.step(2, 'Preparing application data');
-      
+
       if (!mounted) return;
-      
+
       // Convert address to string format expected by backend
-      final street = _streetController.text.trim().isEmpty ? 'Not provided' : _streetController.text.trim();
-      final city = _cityController.text.trim().isEmpty ? 'Not provided' : _cityController.text.trim();
-      final state = _stateController.text.trim().isEmpty ? 'Not provided' : _stateController.text.trim();
-      final zipCode = _zipCodeController.text.trim().isEmpty ? '000000' : _zipCodeController.text.trim();
+      final street = _streetController.text.trim().isEmpty
+          ? 'Not provided'
+          : _streetController.text.trim();
+      final city = _cityController.text.trim().isEmpty
+          ? 'Not provided'
+          : _cityController.text.trim();
+      final state = _stateController.text.trim().isEmpty
+          ? 'Not provided'
+          : _stateController.text.trim();
+      final zipCode = _zipCodeController.text.trim().isEmpty
+          ? '000000'
+          : _zipCodeController.text.trim();
       final addressString = '$street, $city, $state $zipCode, India';
-      
-      final phone = _phoneController.text.trim().isEmpty 
+
+      final phone = _phoneController.text.trim().isEmpty
           ? widget.phoneNumber ?? 'Not provided'
           : _phoneController.text.trim();
-      
+
       // Prepare application data in the format expected by backend
       final applicationData = {
         'businessName': _businessNameController.text.trim(),
         'businessType': _selectedCategory,
-        'contactPerson': _businessNameController.text.trim(), // Backend expects this field
-        'email': _emailController.text.trim(), // Backend expects 'email' not 'contactEmail'
+        'contactPerson': _businessNameController.text
+            .trim(), // Backend expects this field
+        'email': _emailController.text
+            .trim(), // Backend expects 'email' not 'contactEmail'
         'phone': phone, // Backend expects 'phone' not 'contactPhone'
         'businessAddress': addressString, // Backend expects string, not object
       };
 
       if (!mounted) return;
 
-      AppLogger.api('Application data prepared', data: {
-        'businessName': applicationData['businessName'],
-        'businessType': applicationData['businessType'],
-        'contactPerson': applicationData['contactPerson'],
-        'email': applicationData['email'],
-        'phone': applicationData['phone'],
-        'businessAddress': addressString,
-      });
+      AppLogger.api(
+        'Application data prepared',
+        data: {
+          'businessName': applicationData['businessName'],
+          'businessType': applicationData['businessType'],
+          'contactPerson': applicationData['contactPerson'],
+          'email': applicationData['email'],
+          'phone': applicationData['phone'],
+          'businessAddress': addressString,
+        },
+      );
 
       AppLogger.step(3, 'Creating Dio instance and setting up headers');
-      
+
       // Create Dio instance
-      final dio = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 60),
-        receiveTimeout: const Duration(seconds: 60),
-      ));
-      
+      final dio = Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
+        ),
+      );
+
       // Add authorization header if we have Firebase token
       if (widget.firebaseToken != null) {
         dio.options.headers['Authorization'] = 'Bearer ${widget.firebaseToken}';
-        AppLogger.auth('Authorization header set', data: {
-          'hasToken': true,
-          'tokenLength': widget.firebaseToken!.length,
-          'tokenPreview': '${widget.firebaseToken!.substring(0, 20)}...',
-        });
+        AppLogger.auth(
+          'Authorization header set',
+          data: {
+            'hasToken': true,
+            'tokenLength': widget.firebaseToken!.length,
+            'tokenPreview': '${widget.firebaseToken!.substring(0, 20)}...',
+          },
+        );
       } else {
         AppLogger.warning('No Firebase token available for authorization');
       }
@@ -200,7 +217,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
         url: url,
         headers: {
           'Content-Type': 'application/json',
-          if (widget.firebaseToken != null) 'Authorization': 'Bearer ${widget.firebaseToken!.substring(0, 20)}...',
+          if (widget.firebaseToken != null)
+            'Authorization':
+                'Bearer ${widget.firebaseToken!.substring(0, 20)}...',
         },
         body: applicationData,
       );
@@ -210,9 +229,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
         url,
         data: applicationData,
         options: Options(
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: {'Content-Type': 'application/json'},
           validateStatus: (status) => status! < 500,
         ),
       );
@@ -227,16 +244,19 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
       if (mounted) {
         Navigator.of(context).pop(); // Close loading dialog
-        
+
         if (response.statusCode == 200 || response.statusCode == 201) {
           AppLogger.step(5, 'Application submission successful');
-          AppLogger.success('Application submitted successfully', data: {
-            'statusCode': response.statusCode,
-            'responseData': response.data,
-          });
-          
+          AppLogger.success(
+            'Application submitted successfully',
+            data: {
+              'statusCode': response.statusCode,
+              'responseData': response.data,
+            },
+          );
+
           _showSuccess('Application submitted successfully!');
-          
+
           // Navigate to home after short delay
           Future.delayed(const Duration(seconds: 2), () {
             if (mounted) {
@@ -248,42 +268,61 @@ class _OnboardingPageState extends State<OnboardingPage> {
             }
           });
         } else {
-          AppLogger.error('Application submission failed', data: {
-            'statusCode': response.statusCode,
-            'responseData': response.data,
-          });
-          final errorMessage = response.data['message'] ?? 'Failed to submit application';
+          AppLogger.error(
+            'Application submission failed',
+            data: {
+              'statusCode': response.statusCode,
+              'responseData': response.data,
+            },
+          );
+          final errorMessage =
+              response.data['message'] ?? 'Failed to submit application';
           _showError(errorMessage);
         }
       }
     } on DioException catch (e, stackTrace) {
-      AppLogger.error('DioException during application submission', error: e, stackTrace: stackTrace);
-      AppLogger.error('DioException details', data: {
-        'type': e.type.toString(),
-        'message': e.message,
-        'statusCode': e.response?.statusCode,
-        'responseData': e.response?.data,
-      });
+      AppLogger.error(
+        'DioException during application submission',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      AppLogger.error(
+        'DioException details',
+        data: {
+          'type': e.type.toString(),
+          'message': e.message,
+          'statusCode': e.response?.statusCode,
+          'responseData': e.response?.data,
+        },
+      );
 
       if (mounted) {
         Navigator.of(context).pop(); // Close loading dialog
-        
+
         String errorMessage = 'Failed to connect to server';
         if (e.response != null) {
           AppLogger.error('Server error response', data: e.response?.data);
-          errorMessage = e.response!.data['message'] ?? 
-                        'Server error: ${e.response!.statusCode}';
+          errorMessage =
+              e.response!.data['message'] ??
+              'Server error: ${e.response!.statusCode}';
         } else if (e.type == DioExceptionType.connectionTimeout) {
           errorMessage = 'Connection timeout. Please check your internet.';
         } else if (e.type == DioExceptionType.receiveTimeout) {
           errorMessage = 'Server is taking too long to respond.';
         }
-        
-        AppLogger.error('Showing error to user', data: {'errorMessage': errorMessage});
+
+        AppLogger.error(
+          'Showing error to user',
+          data: {'errorMessage': errorMessage},
+        );
         _showError(errorMessage);
       }
     } catch (e, stackTrace) {
-      AppLogger.error('Unexpected error during application submission', error: e, stackTrace: stackTrace);
+      AppLogger.error(
+        'Unexpected error during application submission',
+        error: e,
+        stackTrace: stackTrace,
+      );
       if (mounted) {
         Navigator.of(context).pop(); // Close loading dialog
         _showError('Error submitting application: $e');
@@ -316,61 +355,15 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   Future<void> _pickProfileImage() async {
-    try {
-      final XFile? pickedFile = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 85,
+    // Disabled to avoid file path issues
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Image upload temporarily disabled'),
+          backgroundColor: AppColors.info,
+          duration: Duration(seconds: 2),
+        ),
       );
-
-      if (pickedFile != null) {
-        final File imageFile = File(pickedFile.path);
-        final int fileSize = await imageFile.length();
-        final double fileSizeInMB = fileSize / (1024 * 1024);
-
-        // Check if file size exceeds 5MB
-        if (fileSizeInMB > 5) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Image size too large! Maximum size is 5MB. Selected image is ${fileSizeInMB.toStringAsFixed(2)}MB',
-                ),
-                backgroundColor: AppColors.error,
-                duration: const Duration(seconds: 3),
-              ),
-            );
-          }
-          return;
-        }
-
-        setState(() {
-          _profileImage = imageFile;
-          _hasProfileImage = true;
-        });
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Profile image uploaded successfully (${fileSizeInMB.toStringAsFixed(2)}MB)',
-              ),
-              backgroundColor: AppColors.success,
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error picking image: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
     }
   }
 
@@ -381,38 +374,18 @@ class _OnboardingPageState extends State<OnboardingPage> {
       );
 
       if (pickedFile != null) {
-        final File documentFile = File(pickedFile.path);
-        final int fileSize = await documentFile.length();
-        final double fileSizeInMB = fileSize / (1024 * 1024);
-
-        // Check if file size exceeds 10MB
-        if (fileSizeInMB > 10) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Document size too large! Maximum size is 10MB. Selected document is ${fileSizeInMB.toStringAsFixed(2)}MB',
-                ),
-                backgroundColor: AppColors.error,
-                duration: const Duration(seconds: 3),
-              ),
-            );
-          }
-          return;
-        }
-
         setState(() {
           if (documentType == 'business_license') {
-            _businessLicenseDoc = documentFile;
+            _businessLicenseDoc = File(pickedFile.path);
           } else if (documentType == 'trade_license') {
-            _tradeLicenseDoc = documentFile;
+            _tradeLicenseDoc = File(pickedFile.path);
           }
-          
+
           // Update documents count
           _documentsCount = 0;
           if (_businessLicenseDoc != null) _documentsCount++;
           if (_tradeLicenseDoc != null) _documentsCount++;
-          
+
           _updateProgress();
         });
 
@@ -420,7 +393,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                '${documentType == 'business_license' ? 'Business License' : 'Trade License'} uploaded successfully (${fileSizeInMB.toStringAsFixed(2)}MB)',
+                '${documentType == 'business_license' ? 'Business License' : 'Trade License'} selected',
               ),
               backgroundColor: AppColors.success,
               duration: const Duration(seconds: 2),
@@ -431,8 +404,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error picking document: $e'),
+          const SnackBar(
+            content: Text('Failed to select document'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -446,40 +419,44 @@ class _OnboardingPageState extends State<OnboardingPage> {
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
-        return const Center(
-          child: CircularProgressIndicator(),
-        );
+        return const Center(child: CircularProgressIndicator());
       },
     );
 
     try {
       // Save draft data to SharedPreferences
       final prefs = await SharedPreferences.getInstance();
-      
+
       // Save text fields
-      await prefs.setString('draft_business_name', _businessNameController.text);
+      await prefs.setString(
+        'draft_business_name',
+        _businessNameController.text,
+      );
       await prefs.setString('draft_email', _emailController.text);
       await prefs.setString('draft_phone', _phoneController.text);
       await prefs.setString('draft_category', _selectedCategory);
-      
+
       // Save profile image path if exists
       if (_profileImage != null) {
         await prefs.setString('draft_profile_image', _profileImage!.path);
       }
-      
+
       // Save document paths if exist
       if (_businessLicenseDoc != null) {
-        await prefs.setString('draft_business_license', _businessLicenseDoc!.path);
+        await prefs.setString(
+          'draft_business_license',
+          _businessLicenseDoc!.path,
+        );
       }
       if (_tradeLicenseDoc != null) {
         await prefs.setString('draft_trade_license', _tradeLicenseDoc!.path);
       }
-      
+
       // Save flags
       await prefs.setBool('draft_has_profile_image', _hasProfileImage);
       await prefs.setInt('draft_documents_count', _documentsCount);
       await prefs.setDouble('draft_progress', _progressPercentage);
-      
+
       // Save timestamp
       await prefs.setString('draft_saved_at', DateTime.now().toIso8601String());
 
@@ -597,7 +574,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16.0,
+                  vertical: 12.0,
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -632,7 +612,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         );
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(24),
@@ -678,9 +661,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   constraints: BoxConstraints(
                     maxWidth: MediaQuery.of(context).size.width * 0.88,
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20.0,
+                    vertical: 16.0,
+                  ),
                   child: Form(
-
                     key: _formKey,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -758,8 +743,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 child: Container(
                   height: 8,
                   decoration: BoxDecoration(
-                    color: (_businessNameController.text.isNotEmpty) 
-                        ? AppColors.fluenceGold 
+                    color: (_businessNameController.text.isNotEmpty)
+                        ? AppColors.fluenceGold
                         : AppColors.grey200,
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(4),
@@ -773,8 +758,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 child: Container(
                   height: 8,
                   decoration: BoxDecoration(
-                    color: (_emailController.text.isNotEmpty && _phoneController.text.isNotEmpty) 
-                        ? AppColors.fluenceGold 
+                    color:
+                        (_emailController.text.isNotEmpty &&
+                            _phoneController.text.isNotEmpty)
+                        ? AppColors.fluenceGold
                         : AppColors.grey200,
                   ),
                 ),
@@ -784,8 +771,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 child: Container(
                   height: 8,
                   decoration: BoxDecoration(
-                    color: (_documentsCount > 0) 
-                        ? AppColors.fluenceGold 
+                    color: (_documentsCount > 0)
+                        ? AppColors.fluenceGold
                         : AppColors.grey200,
                     borderRadius: const BorderRadius.only(
                       topRight: Radius.circular(4),
@@ -800,9 +787,15 @@ class _OnboardingPageState extends State<OnboardingPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              Expanded(child: _buildProgressStep('Business Info', Icons.business, 0)),
-              Expanded(child: _buildProgressStep('Contact Details', Icons.mail, 1)),
-              Expanded(child: _buildProgressStep('Documents', Icons.description, 2)),
+              Expanded(
+                child: _buildProgressStep('Business Info', Icons.business, 0),
+              ),
+              Expanded(
+                child: _buildProgressStep('Contact Details', Icons.mail, 1),
+              ),
+              Expanded(
+                child: _buildProgressStep('Documents', Icons.description, 2),
+              ),
             ],
           ),
         ],
@@ -811,7 +804,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   Widget _buildProgressStep(String label, IconData icon, int step) {
-    final isCompleted = (step == 0 && _businessNameController.text.isNotEmpty) ||
+    final isCompleted =
+        (step == 0 && _businessNameController.text.isNotEmpty) ||
         (step == 1 && _emailController.text.isNotEmpty) ||
         (step == 2 && _documentsCount > 0);
 
@@ -822,7 +816,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
           width: 48,
           height: 48,
           decoration: BoxDecoration(
-            color: isCompleted ? AppColors.info.withOpacity(0.15) : AppColors.grey100,
+            color: isCompleted
+                ? AppColors.info.withOpacity(0.15)
+                : AppColors.grey100,
             shape: BoxShape.circle,
           ),
           child: Icon(
@@ -918,11 +914,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.person,
-                color: AppColors.fluenceGold,
-                size: 20,
-              ),
+              const Icon(Icons.person, color: AppColors.fluenceGold, size: 20),
               const SizedBox(width: 8),
               Text(
                 'Profile Picture 🖼️',
@@ -941,23 +933,19 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 height: 60,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(
-                    color: AppColors.fluenceGold,
-                    width: 2,
-                  ),
+                  border: Border.all(color: AppColors.fluenceGold, width: 2),
                 ),
-                child: _hasProfileImage && _profileImage != null
-                    ? ClipOval(
-                  child: Image.file(
-                    _profileImage!,
-                    fit: BoxFit.cover,
-                  ),
-                )
+                child: _hasProfileImage
+                    ? const Icon(
+                        Icons.check_circle,
+                        size: 32,
+                        color: AppColors.success,
+                      )
                     : const Icon(
-                  Icons.person,
-                  size: 32,
-                  color: AppColors.grey400,
-                ),
+                        Icons.person,
+                        size: 32,
+                        color: AppColors.grey400,
+                      ),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -1037,22 +1025,18 @@ class _OnboardingPageState extends State<OnboardingPage> {
             _businessNameController,
           ),
           const SizedBox(height: 12),
-          _buildDropdownField(
-            'Category',
-            _selectedCategory,
-            Icons.category,
-          ),
+          _buildDropdownField('Category', _selectedCategory, Icons.category),
         ],
       ),
     );
   }
 
   Widget _buildTextField(
-      String label,
-      String placeholder,
-      IconData icon,
-      TextEditingController controller,
-      ) {
+    String label,
+    String placeholder,
+    IconData icon,
+    TextEditingController controller,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1091,10 +1075,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                color: AppColors.info,
-                width: 2,
-              ),
+              borderSide: BorderSide(color: AppColors.info, width: 2),
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
@@ -1138,7 +1119,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
               isExpanded: true,
               icon: const Padding(
                 padding: EdgeInsets.only(right: 12.0),
-                child: Icon(Icons.keyboard_arrow_down, color: AppColors.grey600),
+                child: Icon(
+                  Icons.keyboard_arrow_down,
+                  color: AppColors.grey600,
+                ),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               dropdownColor: AppColors.surface,
@@ -1278,10 +1262,16 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         ListTile(
-                          leading: const Icon(Icons.description, color: AppColors.fluenceGold),
+                          leading: const Icon(
+                            Icons.description,
+                            color: AppColors.fluenceGold,
+                          ),
                           title: const Text('Business License'),
-                          trailing: _businessLicenseDoc != null 
-                              ? const Icon(Icons.check_circle, color: AppColors.success)
+                          trailing: _businessLicenseDoc != null
+                              ? const Icon(
+                                  Icons.check_circle,
+                                  color: AppColors.success,
+                                )
                               : null,
                           onTap: () {
                             Navigator.pop(context);
@@ -1289,10 +1279,16 @@ class _OnboardingPageState extends State<OnboardingPage> {
                           },
                         ),
                         ListTile(
-                          leading: const Icon(Icons.description, color: AppColors.fluenceGold),
+                          leading: const Icon(
+                            Icons.description,
+                            color: AppColors.fluenceGold,
+                          ),
                           title: const Text('Trade License'),
-                          trailing: _tradeLicenseDoc != null 
-                              ? const Icon(Icons.check_circle, color: AppColors.success)
+                          trailing: _tradeLicenseDoc != null
+                              ? const Icon(
+                                  Icons.check_circle,
+                                  color: AppColors.success,
+                                )
                               : null,
                           onTap: () {
                             Navigator.pop(context);
@@ -1310,7 +1306,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color: AppColors.info.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
+                borderRadius: BorderRadius.circular(
+                  AppConstants.defaultBorderRadius,
+                ),
                 border: Border.all(
                   color: AppColors.info.withOpacity(0.3),
                   width: 2,
@@ -1362,7 +1360,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
           GestureDetector(
             onTap: () => _pickDocument('business_license'),
             child: _buildDocumentItem(
-              '📄 Business License', 
+              '📄 Business License',
               _businessLicenseDoc != null,
               () => _pickDocument('business_license'),
             ),
@@ -1371,7 +1369,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
           GestureDetector(
             onTap: () => _pickDocument('trade_license'),
             child: _buildDocumentItem(
-              '📋 Trade License', 
+              '📋 Trade License',
               _tradeLicenseDoc != null,
               () => _pickDocument('trade_license'),
             ),
@@ -1391,7 +1389,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
           color: AppColors.grey50,
           borderRadius: BorderRadius.circular(AppConstants.defaultBorderRadius),
           border: Border.all(
-            color: isUploaded ? AppColors.success.withOpacity(0.3) : Colors.transparent,
+            color: isUploaded
+                ? AppColors.success.withOpacity(0.3)
+                : Colors.transparent,
             width: 1,
           ),
         ),
@@ -1401,7 +1401,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: isUploaded ? AppColors.success.withOpacity(0.1) : AppColors.grey200,
+                color: isUploaded
+                    ? AppColors.success.withOpacity(0.1)
+                    : AppColors.grey200,
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Icon(
@@ -1462,9 +1464,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
           children: [
             Text(
               'Submit Application',
-              style: AppTextStyles.buttonText.copyWith(
-                color: AppColors.white,
-              ),
+              style: AppTextStyles.buttonText.copyWith(color: AppColors.white),
             ),
             const SizedBox(width: 8),
             const Icon(Icons.arrow_forward, size: 20),
@@ -1482,10 +1482,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
         onPressed: _saveAsDraft,
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.fluenceGold,
-          side: BorderSide(
-            color: AppColors.fluenceGold,
-            width: 1.5,
-          ),
+          side: BorderSide(color: AppColors.fluenceGold, width: 1.5),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),
@@ -1506,10 +1503,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppConstants.cardBorderRadius),
-        border: Border.all(
-          color: AppColors.grey200,
-          width: 1,
-        ),
+        border: Border.all(color: AppColors.grey200, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1524,9 +1518,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
           const SizedBox(height: 8),
           Text(
             'Our support team is here 24/7 to help you get started!',
-            style: AppTextStyles.bodySmall.copyWith(
-              color: AppColors.grey600,
-            ),
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.grey600),
           ),
         ],
       ),

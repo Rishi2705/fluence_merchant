@@ -4,6 +4,15 @@ import '../core/constants/api_constants.dart';
 import '../utils/logger.dart';
 import 'api_service_new.dart';
 
+/// Exception thrown when merchant profile is not found (404)
+class ProfileNotFoundException implements Exception {
+  final String message;
+  ProfileNotFoundException(this.message);
+  
+  @override
+  String toString() => message;
+}
+
 class MerchantApiService {
   final ApiService _apiService;
 
@@ -177,18 +186,54 @@ class MerchantApiService {
 
   /// Get merchant profile
   Future<MerchantProfile> getProfile() async {
+    AppLogger.step(1, 'MerchantApiService: Fetching merchant profile');
+    AppLogger.api('Profile request', data: {
+      'endpoint': ApiConstants.merchantProfile,
+      'baseUrl': ApiConstants.merchantBaseUrl,
+      'fullUrl': '${ApiConstants.merchantBaseUrl}${ApiConstants.merchantProfile}',
+    });
+
     try {
       final response = await _apiService.get(
         ApiConstants.merchantProfile,
         service: 'merchant',
       );
 
+      AppLogger.api('Profile response', data: {
+        'statusCode': response.statusCode,
+        'data': response.data,
+      });
+
       if (response.statusCode == 200) {
-        return MerchantProfile.fromJson(response.data['data']);
+        final data = response.data;
+        if (data['success'] == true && data['data'] != null) {
+          AppLogger.success('MerchantApiService: Profile fetched successfully');
+          AppLogger.info('MerchantApiService: Profile data from backend', data: data['data']);
+          return MerchantProfile.fromJson(data['data']);
+        } else {
+          AppLogger.error('MerchantApiService: Invalid response format', data: data);
+          throw Exception(data['message'] ?? 'Failed to fetch profile');
+        }
       } else {
+        AppLogger.error('MerchantApiService: Profile fetch failed', data: {
+          'statusCode': response.statusCode,
+          'response': response.data,
+        });
         throw Exception('Failed to fetch profile');
       }
     } on DioException catch (e) {
+      AppLogger.error('MerchantApiService: DioException', error: e, data: {
+        'type': e.type.toString(),
+        'statusCode': e.response?.statusCode,
+        'responseData': e.response?.data,
+      });
+      
+      // Handle 404 specifically for profile not found
+      if (e.response?.statusCode == 404) {
+        AppLogger.warning('MerchantApiService: Profile not found (404) - user needs to complete onboarding');
+        throw ProfileNotFoundException('Profile not found. Please complete your merchant application.');
+      }
+      
       throw _handleError(e);
     }
   }
@@ -239,6 +284,209 @@ class MerchantApiService {
     } on DioException catch (e) {
       throw _handleError(e);
     }
+  }
+
+  /// Get merchant analytics (comprehensive)
+  Future<MerchantAnalytics> getMerchantAnalytics() async {
+    AppLogger.step(1, 'MerchantApiService: Fetching merchant analytics');
+    
+    try {
+      MerchantApplicationStats? applicationStats;
+      MerchantProfileStats? profileStats;
+      MerchantPerformanceMetrics? performanceMetrics;
+      SocialMediaPerformance? socialPerformance;
+
+      try {
+        applicationStats = await getApplicationStats();
+      } catch (e) {
+        AppLogger.warning('MerchantApiService: Failed to fetch application stats', data: e);
+      }
+
+      try {
+        profileStats = await getProfileStats();
+      } catch (e) {
+        AppLogger.warning('MerchantApiService: Failed to fetch profile stats', data: e);
+      }
+
+      try {
+        performanceMetrics = await getPerformanceMetrics();
+      } catch (e) {
+        AppLogger.warning('MerchantApiService: Failed to fetch performance metrics', data: e);
+      }
+
+      try {
+        socialPerformance = await getSocialPerformance();
+      } catch (e) {
+        AppLogger.warning('MerchantApiService: Failed to fetch social performance', data: e);
+      }
+
+      AppLogger.success('MerchantApiService: Merchant analytics compiled', data: {
+        'hasApplicationStats': applicationStats != null,
+        'hasProfileStats': profileStats != null,
+        'hasPerformanceMetrics': performanceMetrics != null,
+        'hasSocialPerformance': socialPerformance != null,
+      });
+
+      return MerchantAnalytics(
+        applicationStats: applicationStats,
+        profileStats: profileStats,
+        performanceMetrics: performanceMetrics,
+        socialPerformance: socialPerformance,
+      );
+    } catch (e, stackTrace) {
+      AppLogger.error('MerchantApiService: Failed to fetch merchant analytics', error: e, stackTrace: stackTrace);
+      return MerchantAnalytics.empty();
+    }
+  }
+
+  Future<MerchantApplicationStats> getApplicationStats() async {
+    final response = await _apiService.get(ApiConstants.merchantApplicationStats, service: 'merchant');
+    if (response.statusCode == 200) {
+      final data = response.data;
+      if (data['success'] == true && data['data'] != null) {
+        // Backend returns array, we need to aggregate it
+        if (data['data'] is List) {
+          final List<dynamic> statsArray = data['data'];
+          int total = 0;
+          int approved = 0;
+          int pending = 0;
+          int rejected = 0;
+          
+          for (var item in statsArray) {
+            final count = int.tryParse(item['count']?.toString() ?? '0') ?? 0;
+            total += count;
+            
+            final status = item['status']?.toString().toLowerCase() ?? '';
+            if (status == 'approved') approved = count;
+            else if (status == 'pending') pending = count;
+            else if (status == 'rejected') rejected = count;
+          }
+          
+          return MerchantApplicationStats(
+            totalApplications: total,
+            approvedApplications: approved,
+            pendingApplications: pending,
+            rejectedApplications: rejected,
+            approvalRate: total > 0 ? (approved / total * 100) : 0.0,
+            averageProcessingDays: 0,
+          );
+        }
+        return MerchantApplicationStats.fromJson(data['data']);
+      }
+    }
+    throw Exception('Failed to fetch application stats');
+  }
+
+  Future<MerchantProfileStats> getProfileStats() async {
+    final response = await _apiService.get(ApiConstants.merchantProfileStats, service: 'merchant');
+    if (response.statusCode == 200) {
+      final data = response.data;
+      if (data['success'] == true && data['data'] != null) {
+        return MerchantProfileStats.fromJson(data['data']);
+      }
+    }
+    throw Exception('Failed to fetch profile stats');
+  }
+
+  Future<MerchantPerformanceMetrics> getPerformanceMetrics() async {
+    AppLogger.step(1, 'MerchantApiService: Fetching performance metrics from cashback service');
+    
+    try {
+      final response = await _apiService.get(ApiConstants.transactionAnalytics, service: 'cashback');
+      
+      AppLogger.api('Performance metrics response', data: {
+        'statusCode': response.statusCode,
+        'hasData': response.data != null,
+      });
+      
+      if (response.statusCode == 200) {
+        final data = response.data;
+        if (data['success'] == true && data['data'] != null) {
+          final analyticsData = data['data'] as Map<String, dynamic>;
+          
+          AppLogger.info('MerchantApiService: Raw analytics data', data: analyticsData);
+          
+          // Extract metrics from cashback transaction analytics
+          final totalRevenue = _parseToDouble(analyticsData['total_volume'] ?? analyticsData['totalVolume'] ?? 0.0);
+          final totalTransactions = _parseToInt(analyticsData['total_transactions'] ?? analyticsData['totalTransactions'] ?? 0);
+          final averageTransactionValue = _parseToDouble(analyticsData['average_transaction_value'] ?? analyticsData['averageTransactionValue'] ?? 0.0);
+          
+          // Calculate monthly revenue (if not provided, use total for now)
+          final monthlyRevenue = _parseToDouble(analyticsData['monthlyRevenue'] ?? analyticsData['monthly_revenue'] ?? totalRevenue);
+          
+          // Get customer metrics
+          final totalCustomers = _parseToInt(analyticsData['totalCustomers'] ?? analyticsData['total_customers'] ?? analyticsData['uniqueCustomers'] ?? analyticsData['unique_customers'] ?? 0);
+          final activeCustomers = _parseToInt(analyticsData['activeCustomers'] ?? analyticsData['active_customers'] ?? totalCustomers);
+          
+          // Calculate retention rate if not provided
+          double retentionRate = _parseToDouble(analyticsData['customerRetentionRate'] ?? analyticsData['customer_retention_rate'] ?? 0.0);
+          if (retentionRate == 0.0 && totalCustomers > 0 && activeCustomers > 0) {
+            retentionRate = (activeCustomers / totalCustomers * 100);
+          }
+          
+          final metrics = MerchantPerformanceMetrics(
+            totalRevenue: totalRevenue,
+            monthlyRevenue: monthlyRevenue,
+            totalTransactions: totalTransactions,
+            monthlyTransactions: _parseToInt(analyticsData['monthlyTransactions'] ?? analyticsData['monthly_transactions'] ?? totalTransactions),
+            averageTransactionValue: averageTransactionValue,
+            customerSatisfactionScore: _parseToDouble(analyticsData['customerSatisfactionScore'] ?? analyticsData['customer_satisfaction_score'] ?? 0.0),
+            totalCustomers: totalCustomers,
+            activeCustomers: activeCustomers,
+            customerRetentionRate: retentionRate,
+          );
+          
+          AppLogger.success('MerchantApiService: Performance metrics parsed successfully', data: {
+            'totalRevenue': metrics.totalRevenue,
+            'totalTransactions': metrics.totalTransactions,
+            'totalCustomers': metrics.totalCustomers,
+          });
+          
+          return metrics;
+        }
+      }
+    } catch (e, stackTrace) {
+      AppLogger.error('MerchantApiService: Failed to fetch performance metrics', error: e, stackTrace: stackTrace);
+    }
+    
+    AppLogger.warning('MerchantApiService: Using fallback performance metrics');
+    return MerchantPerformanceMetrics(
+      totalRevenue: 0.0, monthlyRevenue: 0.0, totalTransactions: 0, monthlyTransactions: 0,
+      averageTransactionValue: 0.0, customerSatisfactionScore: 0.0, totalCustomers: 0,
+      activeCustomers: 0, customerRetentionRate: 0.0,
+    );
+  }
+  
+  static int _parseToInt(dynamic value) {
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value) ?? 0;
+    if (value is double) return value.round();
+    return 0;
+  }
+
+  static double _parseToDouble(dynamic value) {
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+
+  Future<SocialMediaPerformance> getSocialPerformance() async {
+    try {
+      final response = await _apiService.get(ApiConstants.socialMerchantReports, service: 'social');
+      if (response.statusCode == 200) {
+        final data = response.data;
+        if (data['success'] == true && data['data'] != null) {
+          return SocialMediaPerformance.fromJson(data['data']);
+        }
+      }
+    } catch (e) {
+      AppLogger.warning('MerchantApiService: Social service unavailable, using fallback performance');
+    }
+    return SocialMediaPerformance(
+      totalPosts: 0, totalLikes: 0, totalShares: 0, totalComments: 0,
+      engagementRate: 0.0, followers: 0, reachGrowth: 0.0,
+    );
   }
 
   /// Handle errors

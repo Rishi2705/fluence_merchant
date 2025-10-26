@@ -72,4 +72,16 @@ class MerchantRepository {
       limit: limit,
     );
   }
+
+  Future<MerchantAnalytics> getAnalytics() async {
+    AppLogger.step(1, 'MerchantRepository: Fetching merchant analytics');
+    try {
+      final analytics = await _merchantApiService.getMerchantAnalytics();
+      AppLogger.success('MerchantRepository: Analytics fetched successfully');
+      return analytics;
+    } catch (e, stackTrace) {
+      AppLogger.error('MerchantRepository: Failed to fetch analytics', error: e, stackTrace: stackTrace);
+      rethrow;
+    }
+  }
 }

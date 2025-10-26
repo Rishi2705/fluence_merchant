@@ -1,8 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/theme.dart';
 import '../../core/constants/api_constants.dart';
+import '../../core/di/service_locator.dart';
+import '../../services/api_service_new.dart';
 import '../../utils/logger.dart';
 import 'onboarding_page.dart';
 import 'main_container_page.dart';
@@ -54,7 +57,6 @@ class _PhoneAuthPageState extends State<PhoneAuthPage> {
 
     try {
       UserCredential? userCredential;
-      bool authSucceeded = false;
       
       AppLogger.step(2, _isLogin ? 'Attempting Firebase login' : 'Attempting Firebase signup');
       
@@ -66,7 +68,6 @@ class _PhoneAuthPageState extends State<PhoneAuthPage> {
             email: email,
             password: password,
           );
-          authSucceeded = true;
           AppLogger.firebase('Firebase sign in successful', data: {
             'uid': userCredential.user?.uid,
             'email': userCredential.user?.email,
@@ -78,7 +79,6 @@ class _PhoneAuthPageState extends State<PhoneAuthPage> {
         } catch (e) {
           // Ignore Pigeon errors and try to proceed
           AppLogger.warning('Sign in error (may be Pigeon, continuing)', data: e);
-          authSucceeded = true; // Assume success, will verify with currentUser
         }
       } else {
         // Create new account
@@ -88,7 +88,6 @@ class _PhoneAuthPageState extends State<PhoneAuthPage> {
             email: email,
             password: password,
           );
-          authSucceeded = true;
           AppLogger.firebase('Firebase account creation successful', data: {
             'uid': userCredential.user?.uid,
             'email': userCredential.user?.email,
@@ -100,7 +99,6 @@ class _PhoneAuthPageState extends State<PhoneAuthPage> {
         } catch (e) {
           // Ignore Pigeon errors and try to proceed
           AppLogger.warning('Create account error (may be Pigeon, continuing)', data: e);
-          authSucceeded = true; // Assume success, will verify with currentUser
         }
       }
 
@@ -237,6 +235,18 @@ class _PhoneAuthPageState extends State<PhoneAuthPage> {
               'needsProfileCompletion': needsProfileCompletion,
               'userData': responseData['user'],
             });
+
+            // Save the backend JWT token to SharedPreferences and update API service
+            if (backendToken != null) {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setString('auth_token', backendToken);
+              
+              // Update the API service with the new token
+              final apiService = getIt<ApiService>();
+              await apiService.setToken(backendToken);
+              
+              AppLogger.success('Backend token saved and API service updated');
+            }
 
             if (mounted) {
               setState(() {

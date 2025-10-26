@@ -133,7 +133,6 @@ class AppLogger {
     Map<String, dynamic>? headers,
     Object? body,
   }) {
-    final timestamp = DateTime.now().toIso8601String();
     api('$method Request to: $url');
     
     if (headers != null && headers.isNotEmpty) {

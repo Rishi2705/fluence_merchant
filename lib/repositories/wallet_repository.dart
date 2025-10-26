@@ -11,54 +11,84 @@ class WalletRepository {
   }
 
   Future<List<WalletTransaction>> getTransactions({
-    int page = 1,
     int limit = 20,
+    int offset = 0,
     String? type,
     String? status,
   }) async {
     return await _walletApiService.getTransactions(
-      page: page,
       limit: limit,
+      offset: offset,
       type: type,
       status: status,
     );
   }
 
   Future<List<CashbackTransaction>> getCashbackTransactions({
-    int page = 1,
     int limit = 20,
+    int offset = 0,
   }) async {
     return await _walletApiService.getCashbackTransactions(
-      page: page,
       limit: limit,
+      offset: offset,
     );
   }
 
-  Future<WalletTransaction> transfer({
-    required String recipientId,
+  Future<WalletTransaction> awardPoints({
     required double amount,
-    String? description,
+    required String transactionType,
+    required String description,
+    String? referenceId,
+    bool socialPostRequired = false,
   }) async {
-    return await _walletApiService.transfer(
-      recipientId: recipientId,
+    return await _walletApiService.awardPoints(
+      amount: amount,
+      transactionType: transactionType,
+      description: description,
+      referenceId: referenceId,
+      socialPostRequired: socialPostRequired,
+    );
+  }
+
+  Future<WalletTransaction> redeemPoints({
+    required double amount,
+    required String description,
+    String? referenceId,
+  }) async {
+    return await _walletApiService.redeemPoints(
       amount: amount,
       description: description,
+      referenceId: referenceId,
     );
   }
 
-  Future<WalletTransaction> withdraw({
-    required double amount,
-    required String bankAccountId,
-    String? description,
+  Future<Map<String, dynamic>> submitSocialPost({
+    required String transactionId,
+    required String socialPostUrl,
   }) async {
-    return await _walletApiService.withdraw(
-      amount: amount,
-      bankAccountId: bankAccountId,
-      description: description,
+    return await _walletApiService.submitSocialPost(
+      transactionId: transactionId,
+      socialPostUrl: socialPostUrl,
     );
   }
 
-  Future<Map<String, dynamic>> checkBalance(double amount) async {
-    return await _walletApiService.checkBalance(amount);
+  Future<Map<String, dynamic>> getPointsStatistics() async {
+    return await _walletApiService.getPointsStatistics();
+  }
+
+  Future<List<BalanceHistoryPoint>> getBalanceHistory({int days = 30}) async {
+    return await _walletApiService.getBalanceHistory(days: days);
+  }
+
+  Future<LifetimeWalletStats> getLifetimeStats() async {
+    return await _walletApiService.getLifetimeStats();
+  }
+
+  Future<TransactionDetail?> getTransactionDetails(String transactionId) async {
+    return await _walletApiService.getTransactionDetails(transactionId);
+  }
+
+  Future<DailyTransactionSummary?> getDailySummary() async {
+    return await _walletApiService.getDailySummary();
   }
 }
